@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --fondo: 248 250 252;      /* slate-50 */
+  --tarjeta: 255 255 255;
+  --borde: 226 232 240;      /* slate-200 */
+  --texto: 15 23 42;         /* slate-900 */
+  --texto-sutil: 100 116 139;/* slate-500 */
+}
+
+.dark {
+  --fondo: 15 23 42;         /* slate-900 */
+  --tarjeta: 30 41 59;       /* slate-800 */
+  --borde: 51 65 85;         /* slate-600 */
+  --texto: 241 245 249;      /* slate-100 */
+  --texto-sutil: 148 163 184;/* slate-400 */
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: rgb(var(--fondo));
+  color: rgb(var(--texto));
+}
+
+.numero {
+  font-variant-numeric: tabular-nums;
+}
