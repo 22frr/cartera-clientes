@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getClientes, getResumen, crearCliente, archivarCliente, restaurarCliente, eliminarCliente, dinero, logout, nombreNegocio } from './api';
-import { useNavigate } from 'react-router-dom';
-import { abrirCatalogo } from './abrirCatalogo';
+import { useCatalogo } from './CatalogoContext';
 import ThemeToggle from './ThemeToggle';
+import { flechasEnFormulario } from './teclado';
 
 
 export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const verArchivados = searchParams.get('archivados') === '1';
-  const navigate = useNavigate();
+  const { alternarCatalogo } = useCatalogo();
 
   const [clientes, setClientes] = useState([]);
   const [resumen, setResumen] = useState(null);
@@ -118,16 +118,16 @@ export default function App() {
     .filter((c) => !soloDeuda || Number(c.saldo) > 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="bg-marca-700 text-white p-4 shadow-md">
+    <div className="min-h-screen fondo-app">
+      <header className="cabecera p-4">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             {verArchivados && (
               <button onClick={salirDeArchivados} className="text-2xl leading-none">←</button>
             )}
             <div>
-              <h1 className="font-display font-bold text-xl">
-                {verArchivados ? 'Clientes archivados' : 'Cartera de clientes'}
+              <h1 className="font-display font-extrabold text-2xl tracking-tight">
+                {verArchivados ? 'Clientes archivados' : 'FIADO$'}
               </h1>
               <p className="text-xs text-marca-100">
                 {verArchivados ? 'Podés restaurarlos o eliminarlos' : nombreNegocio()}
@@ -137,7 +137,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <button
-              onClick={() => abrirCatalogo(navigate)}
+              onClick={alternarCatalogo}
               className="text-sm bg-black/15 hover:bg-black/25 px-3 py-1.5 rounded-lg transition-colors"
             >
               📦 Catálogo
@@ -194,7 +194,7 @@ export default function App() {
               {!verArchivados && (
                 <button
                   onClick={irAArchivados}
-                  className="text-xs px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-marca-500 transition-colors"
+                  className="text-xs px-3 py-1.5 rounded-full border-2 border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-marca-500 transition-colors"
                 >
                   Ver archivados
                 </button>
@@ -214,7 +214,7 @@ export default function App() {
         )}
 
         {mostrarForm && (
-          <form onSubmit={guardar} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm space-y-3">
+          <form onSubmit={guardar} className="tarjeta p-4 space-y-3" onKeyDown={flechasEnFormulario}>
             <Campo label="Nombre *" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} />
             <Campo label="Teléfono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
             <Campo label="Dirección" value={form.direccion} onChange={(v) => setForm({ ...form, direccion: v })} />
@@ -226,7 +226,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setMostrarForm(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                  className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
                 >
                   Cancelar
                 </button>
@@ -277,10 +277,10 @@ export default function App() {
                 {seleccionando ? (
                   <button
                     onClick={() => toggleSeleccion(c.id)}
-                    className={`w-full text-left bg-white dark:bg-slate-800 border p-4 rounded-xl shadow-sm flex justify-between items-center transition-colors ${
+                    className={`w-full text-left tarjeta p-4 flex justify-between items-center transition-colors ${
                       seleccionados.has(c.id)
                         ? 'border-marca-500 ring-2 ring-marca-200 dark:ring-marca-900'
-                        : 'border-slate-200 dark:border-slate-700'
+                        : ''
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -292,8 +292,8 @@ export default function App() {
                         className="w-5 h-5 accent-marca-600 shrink-0"
                       />
                       <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">{c.nombre}</p>
-                        {c.telefono && <p className="text-sm text-slate-400">{c.telefono}</p>}
+                        <p className="font-display font-bold text-lg text-slate-900 dark:text-white">{c.nombre}</p>
+                        {c.telefono && <p className="text-sm text-slate-600 dark:text-slate-300">{c.telefono}</p>}
                       </div>
                     </div>
                     <p className={`numero font-bold ${Number(c.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
@@ -303,15 +303,15 @@ export default function App() {
                 ) : (
                   <Link
                     to={`/cliente/${c.id}${verArchivados ? '?desde=archivados' : ''}`}
-                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm flex justify-between items-center hover:border-marca-400 dark:hover:border-marca-500 transition-colors"
+                    className="tarjeta p-4 flex justify-between items-center hover:-translate-y-0.5 hover:border-marca-600 transition-transform"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-marca-100 dark:bg-marca-900 text-marca-700 dark:text-marca-300 flex items-center justify-center font-display font-bold shrink-0">
                         {c.nombre.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">{c.nombre}</p>
-                        {c.telefono && <p className="text-sm text-slate-400">{c.telefono}</p>}
+                        <p className="font-display font-bold text-lg text-slate-900 dark:text-white">{c.nombre}</p>
+                        {c.telefono && <p className="text-sm text-slate-600 dark:text-slate-300">{c.telefono}</p>}
                       </div>
                     </div>
                     <p className={`numero font-bold ${Number(c.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
@@ -322,7 +322,7 @@ export default function App() {
               </li>
             ))}
             {visibles.length === 0 && (
-              <p className="text-center text-slate-400 py-6">No hay clientes para mostrar.</p>
+              <p className="text-center text-slate-600 dark:text-slate-300 py-6">No hay clientes para mostrar.</p>
             )}
           </ul>
         )}
@@ -333,13 +333,13 @@ export default function App() {
 
 function Tarjeta({ titulo, valor, destacado }) {
   return (
-    <div className={`p-3 rounded-xl shadow-sm text-center border ${
+    <div className={`tarjeta p-3 text-center ${
       destacado
-        ? 'bg-red-50 dark:bg-red-950 border-red-100 dark:border-red-900'
-        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+        ? 'bg-red-50 dark:bg-red-950'
+        : ''
     }`}>
-      <p className="text-xs text-slate-400">{titulo}</p>
-      <p className={`numero text-lg font-bold ${destacado ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
+      <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{titulo}</p>
+      <p className={`numero font-display text-2xl font-extrabold ${destacado ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
         {valor}
       </p>
     </div>
@@ -351,7 +351,7 @@ function Campo({ label, value, onChange }) {
     <label className="block text-sm text-slate-600 dark:text-slate-300">
       {label}
       <input
-        className="mt-1 w-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+        className="mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />

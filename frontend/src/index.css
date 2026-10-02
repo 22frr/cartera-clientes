@@ -3,7 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --fondo: 248 250 252;      /* slate-50 */
+  --fondo: 246 249 253;      /* papel de cuaderno */
+  --linea: 15 23 42;         /* tinta (borde de tarjetas) */
+  --sombra: 15 23 42;        /* sombra dura */
+  --cuadricula: 96 140 200 / 0.16;
   --tarjeta: 255 255 255;
   --borde: 226 232 240;      /* slate-200 */
   --texto: 15 23 42;         /* slate-900 */
@@ -12,6 +15,9 @@
 
 .dark {
   --fondo: 15 23 42;         /* slate-900 */
+  --linea: 100 116 139;
+  --sombra: 0 0 0;
+  --cuadricula: 148 163 184 / 0.07;
   --tarjeta: 30 41 59;       /* slate-800 */
   --borde: 51 65 85;         /* slate-600 */
   --texto: 241 245 249;      /* slate-100 */
@@ -26,4 +32,53 @@ body {
 
 .numero {
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Estilo "libreta de fiado": papel cuadriculado + tinta + sombra dura ---------- */
+@layer components {
+  .fondo-app {
+    background-color: rgb(var(--fondo));
+    background-image:
+      linear-gradient(rgb(var(--cuadricula)) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--cuadricula)) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .fondo-liso { background-color: rgb(var(--fondo)); }
+
+  .tarjeta {
+    background-color: rgb(var(--tarjeta));
+    border: 2px solid rgb(var(--linea));
+    border-radius: 0.75rem;
+    box-shadow: 4px 4px 0 0 rgb(var(--sombra));
+  }
+  .tarjeta-chica {
+    background-color: rgb(var(--tarjeta));
+    border: 2px solid rgb(var(--linea));
+    border-radius: 0.75rem;
+    box-shadow: 2px 2px 0 0 rgb(var(--sombra));
+  }
+
+  .cabecera {
+    @apply bg-marca-700 text-white;
+    border-bottom: 4px solid rgb(var(--sombra));
+  }
+
+  .boton-duro {
+    border: 2px solid rgb(var(--linea));
+    box-shadow: 3px 3px 0 0 rgb(var(--sombra));
+    transition: transform 80ms, box-shadow 80ms, background-color 150ms;
+  }
+  .boton-duro:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 0 rgb(var(--sombra)); }
+  .boton-duro:active { transform: translate(3px, 3px); box-shadow: 0 0 0 0 rgb(var(--sombra)); }
+
+  .titulo-seccion {
+    @apply font-display font-extrabold text-2xl text-slate-900 dark:text-white decoration-marca-500;
+    text-decoration-line: underline;
+    text-decoration-thickness: 4px;
+    text-underline-offset: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boton-duro, .boton-duro:hover, .boton-duro:active { transition: none; transform: none; }
 }

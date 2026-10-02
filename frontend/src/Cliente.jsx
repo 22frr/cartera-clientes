@@ -4,9 +4,11 @@ import {
   getCliente, getMovimientos, crearVenta, crearPago, editarVenta,
   anularVenta, anularPago, eliminarVenta, eliminarPago,
   restaurarVenta, restaurarPago,
+  archivarCliente, restaurarCliente ,
   editarCliente, eliminarCliente, dinero, fecha, 
 } from './api';
-import { abrirCatalogo } from './abrirCatalogo';
+import { useCatalogo } from './CatalogoContext';
+import { flechasEnFormulario } from './teclado';
 
 const filaVacia = { producto: '', cantidad: '1', precio_unitario: '', total: '' };
 
@@ -54,10 +56,158 @@ function agregarFila(filas, setFilas, refs) {
   enfocar(refs, filas.length, 0);
 }
 
-function TablaProductos({ filas, onEditar, onQuitar, onEnter, onAgregar, refsProducto }) {
+// Minúsculas y sin tildes, para que "cafe" encuentre "Café"
+function normalizar(s) {
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Coincidencias del catálogo: todas las palabras escritas deben estar en el nombre
+// (en cualquier orden). Primero los que empiezan con lo escrito. Máximo 8.
+function buscarSugerencias(catalogo, texto) {
+  const q = normalizar(texto).trim();
+  if (!q) return [];
+  const palabras = q.split(/\s+/);
+  const puntaje = (n) => {
+    if (n.startsWith(q)) return 0;
+    const inicios = n.split(/\s+/);
+    return palabras.every((w) => inicios.some((x) => x.startsWith(w))) ? 1 : 2;
+  };
+  return catalogo
+    .map((p) => ({ p, n: normalizar(p.nombre) }))
+    .filter(({ n }) => palabras.every((w) => n.includes(w)))
+    .sort((a, b) => puntaje(a.n) - puntaje(b.n) || a.n.localeCompare(b.n))
+    .slice(0, 20)
+    .map(({ p }) => p);
+}
+
+// Suma un producto a la tabla: si ya está, +1 cantidad; si no, usa la primera fila vacía o agrega una
+function sumarProducto(filas, p) {
+  const nombre = p.nombre.trim().toLowerCase();
+  const i = filas.findIndex((f) => f.producto.trim().toLowerCase() === nombre);
+  if (i >= 0) return actualizarFila(filas, i, 'cantidad', String((Number(filas[i].cantidad) || 0) + 1));
+
+  const precio = p.precio != null && Number(p.precio) > 0 ? String(Number(p.precio)) : '';
+  const nueva = { producto: p.nombre, cantidad: '1', precio_unitario: precio, total: precio };
+  const vacia = filas.findIndex((f) => !f.producto.trim() && !f.precio_unitario);
+  if (vacia >= 0) {
+    const copia = [...filas];
+    copia[vacia] = nueva;
+    return copia;
+  }
+  return [...filas, nueva];
+}
+
+function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onAgregar, refsProducto }) {
+  const [abierto, setAbierto] = useState(null);   // índice de la fila con el desplegable abierto
+  const [resaltado, setResaltado] = useState(-1); // sugerencia marcada con flechas (-1 = ninguna)
+  const listaRef = useRef(null);
+
+  const sugerencias =
+    abierto !== null && filas[abierto] ? buscarSugerencias(catalogo, filas[abierto].producto) : [];
+
+    // Mantiene visible la sugerencia marcada con las flechas
+  useEffect(() => {
+    const ul = listaRef.current;
+    const li = ul?.children[resaltado];
+    if (!ul || !li) return;
+    if (li.offsetTop < ul.scrollTop) ul.scrollTop = li.offsetTop;
+    else if (li.offsetTop + li.offsetHeight > ul.scrollTop + ul.clientHeight)
+      ul.scrollTop = li.offsetTop + li.offsetHeight - ul.clientHeight;
+  }, [resaltado]);
+
+  function cerrarSugerencias() {
+    setAbierto(null);
+    setResaltado(-1);
+  }
+
+  // Autocompleta producto y precio; el foco pasa a Cantidad
+  function elegir(i, p) {
+    onEditar(i, 'producto', p.nombre);
+    if (p.precio != null && Number(p.precio) > 0) {
+      onEditar(i, 'precio_unitario', String(Number(p.precio)));
+    }
+    cerrarSugerencias();
+    enfocar(refsProducto, i, 1);
+  }
+
+  // Props extra SOLO para el campo Producto (pisan onChange/onKeyDown de campo())
+  const propsProducto = (i) => ({
+    autoComplete: 'off',
+    onChange: (e) => {
+      onEditar(i, 'producto', e.target.value);
+      setAbierto(i);
+      setResaltado(-1);
+    },
+    onBlur: cerrarSugerencias,
+        onFocus: (e) => {
+      e.target.select();
+      const texto = filas[i].producto;
+      const resuelto = catalogo.some((p) => normalizar(p.nombre) === normalizar(texto));
+      // Si hay algo escrito que todavía no es un producto del catálogo, vuelve a mostrar las sugerencias
+      if (texto.trim() && !resuelto) {
+        setAbierto(i);
+        setResaltado(-1);
+      }
+    },
+        onKeyDown: (e) => {
+      const hay = abierto === i && sugerencias.length > 0;
+      if (hay && e.key === 'ArrowDown') {
+        e.preventDefault();
+        setResaltado((r) => (r + 1) % sugerencias.length);
+      } else if (hay && e.key === 'ArrowUp') {
+        e.preventDefault();
+        setResaltado((r) => (r <= 0 ? sugerencias.length - 1 : r - 1));
+      } else if (hay && e.key === 'Escape') {
+        cerrarSugerencias();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (hay && resaltado >= 0) {
+          elegir(i, sugerencias[resaltado]);
+        } else {
+          cerrarSugerencias();
+          onEnter(i, 0);
+        }
+      } else {
+        manejarFlechas(e, i, 0);
+      }
+    },
+  });
+
+  // Flechas entre celdas, como en una planilla.
+  function manejarFlechas(e, i, c) {
+    const { key } = e;
+    if (key !== 'ArrowUp' && key !== 'ArrowDown' && key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+
+    const irA = (fila, col) => {
+      e.preventDefault();
+      refsProducto.current[fila]?.[col]?.focus();
+    };
+
+    if (key === 'ArrowDown' || key === 'ArrowUp') {
+      e.preventDefault(); // evita que los campos numéricos suban/bajen el valor
+      const fila = key === 'ArrowDown' ? i + 1 : i - 1;
+      if (fila >= 0 && fila < filas.length) irA(fila, c);
+      return;
+    }
+
+    let inicio = null, fin = null;
+    try { inicio = e.target.selectionStart; fin = e.target.selectionEnd; } catch { /* campo numérico */ }
+    const largo = e.target.value.length;
+    const alInicio = inicio === null || (inicio === 0 && fin === 0);
+    const alFinal = inicio === null || (inicio === largo && fin === largo);
+
+    if (key === 'ArrowRight' && alFinal) {
+      if (c < 3) irA(i, c + 1);
+      else if (i < filas.length - 1) irA(i + 1, 0);
+    } else if (key === 'ArrowLeft' && alInicio) {
+      if (c > 0) irA(i, c - 1);
+      else if (i > 0) irA(i - 1, 3);
+    }
+  }
+
   const inputCls =
-    'w-full min-w-0 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-marca-500';
-  const labelCls = 'block text-[11px] font-semibold text-slate-400 sm:hidden mb-0.5';
+    'w-full min-w-0 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-marca-500';
+  const labelCls = 'block text-xs font-bold text-slate-700 dark:text-slate-200 sm:hidden mb-0.5';
 
   const campo = (i, c, nombre) => ({
     ref: (el) => {
@@ -69,10 +219,12 @@ function TablaProductos({ filas, onEditar, onQuitar, onEnter, onAgregar, refsPro
     enterKeyHint: c < 2 ? 'next' : 'done',
     onChange: (e) => onEditar(i, nombre, e.target.value),
     onFocus: (e) => e.target.select(),
-    onKeyDown: (e) => {
+        onKeyDown: (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         onEnter(i, c);
+      } else {
+        manejarFlechas(e, i, c);
       }
     },
   });
@@ -81,7 +233,7 @@ function TablaProductos({ filas, onEditar, onQuitar, onEnter, onAgregar, refsPro
     <button
       type="button"
       onClick={() => onQuitar(i)}
-      className={`text-slate-400 hover:text-red-500 text-xl leading-none transition-colors ${extra}`}
+      className={`text-slate-600 dark:text-slate-300 hover:text-red-500 text-xl leading-none transition-colors ${extra}`}
       title="Quitar producto"
     >
       ×
@@ -90,7 +242,7 @@ function TablaProductos({ filas, onEditar, onQuitar, onEnter, onAgregar, refsPro
 
   return (
     <div className="space-y-2">
-      <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_70px_100px_100px_28px] gap-2 text-xs font-semibold text-slate-400 px-1">
+      <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_70px_100px_100px_28px] gap-2 text-sm font-bold text-slate-700 dark:text-slate-200 px-1">
         <span>Producto</span>
         <span>Cant.</span>
         <span>P. unit.</span>
@@ -104,9 +256,43 @@ function TablaProductos({ filas, onEditar, onQuitar, onEnter, onAgregar, refsPro
           className="grid grid-cols-3 gap-2 items-end border border-slate-200 dark:border-slate-700 rounded-lg p-2 sm:border-0 sm:p-0 sm:grid-cols-[minmax(0,1fr)_70px_100px_100px_28px] sm:items-center"
         >
           <div className="col-span-3 sm:col-span-1 flex items-center gap-2 min-w-0">
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 relative">
               <span className={labelCls}>Producto</span>
-              <input {...campo(i, 0, 'producto')} />
+              <input {...campo(i, 0, 'producto')} {...propsProducto(i)} />
+              {abierto === i && sugerencias.length > 0 && (
+                <ul
+                    ref={listaRef}
+                    className="absolute left-0 right-0 top-full mt-1 z-30 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 border-2 border-slate-800 dark:border-slate-400 rounded-lg shadow-xl"
+                  >
+                  {sugerencias.map((p, idx) => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        // mousedown (y no click) + preventDefault: evita que el input pierda el foco antes de elegir
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          elegir(i, p);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-3 transition-colors ${
+                          idx === resaltado
+                            ? 'bg-marca-100 dark:bg-marca-900'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-slate-900 dark:text-white">{p.nombre}</span>
+                          {p.categoria && (
+                            <span className="block truncate text-xs font-medium text-slate-600 dark:text-slate-300">{p.categoria}</span>
+                          )}
+                        </span>
+                        <span className="numero shrink-0 text-slate-500 dark:text-slate-300">
+                          {p.precio != null ? dinero(p.precio) : ''}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             {botonQuitar(i, 'sm:hidden self-end pb-1')}
           </div>
@@ -147,6 +333,7 @@ export default function Cliente() {
   const [cliente, setCliente] = useState(null);
   const [movs, setMovs] = useState([]);
   const [modo, setModo] = useState(null);
+  
 
   const [filas, setFilas] = useState([{ ...filaVacia }]);
   const refsProducto = useRef([]);
@@ -170,6 +357,9 @@ export default function Cliente() {
   const [movsSeleccionados, setMovsSeleccionados] = useState(new Set());
   const [procesandoMovs, setProcesandoMovs] = useState(false);
 
+  const { productosActivos: catalogo, alternarCatalogo, registrarDestino } = useCatalogo();
+
+
   async function cargar() {
     try {
       const [c, m] = await Promise.all([getCliente(id), getMovimientos(id)]);
@@ -182,6 +372,14 @@ export default function Cliente() {
   }
 
   useEffect(() => { cargar(); }, [id]);
+
+// Mientras haya una compra abierta (nueva o en edición), el catálogo puede sumarle productos
+  useEffect(() => {
+    if (editando !== null) registrarDestino((p) => setFilasEdit((prev) => sumarProducto(prev, p)));
+    else if (modo === 'compra') registrarDestino((p) => setFilas((prev) => sumarProducto(prev, p)));
+    else registrarDestino(null);
+    return () => registrarDestino(null);
+  }, [modo, editando, registrarDestino]);
 
   function empezarEdicionCliente() {
     setFormCliente({
@@ -371,6 +569,17 @@ export default function Cliente() {
   }
 }
 
+async function eliminarMov(m) {
+  if (!window.confirm('¿Eliminar definitivamente este movimiento? Esto no se puede deshacer.')) return;
+  try {
+    if (m.tipo === 'venta') await eliminarVenta(m.id);
+    else await eliminarPago(m.id);
+    cargar();
+  } catch (e) {
+    setError(e.message);
+  }
+}
+
 function claveMov(m) {
   return `${m.tipo}-${m.id}`;
 }
@@ -461,15 +670,15 @@ async function eliminarMovsSeleccionados() {
     });
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="bg-marca-700 text-white p-4 shadow-md">
+    <div className="min-h-screen fondo-app">
+      <header className="cabecera p-4">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <button onClick={() => navigate(-1)} className="text-2xl leading-none shrink-0">←</button>
               <h1 className="font-display font-bold text-xl truncate">{cliente ? cliente.nombre : 'Cliente'}</h1>
             </div>
             <button
-              onClick={() => abrirCatalogo(navigate)}
+              onClick={alternarCatalogo}
               className="text-sm bg-black/15 hover:bg-black/25 px-3 py-1.5 rounded-lg transition-colors shrink-0"
             >
               📦 Catálogo
@@ -485,9 +694,9 @@ async function eliminarMovsSeleccionados() {
         {cliente && (
           <>
             {/* Tarjeta del cliente */}
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm">
+            <div className="tarjeta p-4">
               {editandoCliente ? (
-                <form onSubmit={guardarCliente} className="space-y-3">
+                <form onSubmit={guardarCliente} className="space-y-3" onKeyDown={flechasEnFormulario}>
                   {[
                     ['nombre', 'Nombre *'],
                     ['telefono', 'Teléfono'],
@@ -497,7 +706,7 @@ async function eliminarMovsSeleccionados() {
                     <label key={campo} className="block text-sm text-slate-600 dark:text-slate-300">
                       {etiqueta}
                       <input
-                        className="mt-1 w-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                        className="mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
                         value={formCliente[campo]}
                         onChange={(e) => setFormCliente({ ...formCliente, [campo]: e.target.value })}
                       />
@@ -510,7 +719,7 @@ async function eliminarMovsSeleccionados() {
                     <button
                       type="button"
                       onClick={() => setEditandoCliente(false)}
-                      className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                      className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
                     >
                       Cancelar
                     </button>
@@ -523,11 +732,11 @@ async function eliminarMovsSeleccionados() {
                       Archivado
                     </span>
                   )}
-                  <p className="text-sm text-slate-400">Saldo pendiente</p>
-                  <p className={`numero font-display text-3xl font-extrabold ${Number(cliente.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
+                  <p className="text-base font-bold text-slate-700 dark:text-slate-200">Saldo pendiente</p>
+                  <p className={`numero font-display text-5xl font-extrabold tracking-tight ${Number(cliente.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
                     {dinero(cliente.saldo)}
                   </p>
-                  <div className="text-sm text-slate-400 mt-2 space-y-0.5">
+                  <div className="text-sm text-slate-600 dark:text-slate-300 mt-2 space-y-0.5">
                     {cliente.telefono && <p>Tel: {cliente.telefono}</p>}
                     {cliente.direccion && <p>{cliente.direccion}</p>}
                     {cliente.notas && <p className="italic">{cliente.notas}</p>}
@@ -535,7 +744,7 @@ async function eliminarMovsSeleccionados() {
                  <div className="flex justify-center gap-2 mt-4 flex-wrap">
                     <button
                       onClick={empezarEdicionCliente}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
                     >
                       Editar cliente
                     </button>
@@ -571,22 +780,23 @@ async function eliminarMovsSeleccionados() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => abrir('compra')}
-                className={`py-3 rounded-xl font-medium text-white transition-colors ${modo === 'compra' ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'}`}
+                className={`boton-duro py-3 rounded-xl font-display font-extrabold text-lg text-white ${modo === 'compra' ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'}`}
               >
                 + Compra
               </button>
               <button
                 onClick={() => abrir('pago')}
-                className={`py-3 rounded-xl font-medium text-white transition-colors ${modo === 'pago' ? 'bg-marca-700' : 'bg-marca-600 hover:bg-marca-700'}`}
+                className={`boton-duro py-3 rounded-xl font-display font-extrabold text-lg text-white ${modo === 'pago' ? 'bg-marca-700' : 'bg-marca-600 hover:bg-marca-700'}`}
               >
                 + Pago
               </button>
             </div>
 
            {modo === 'compra' && (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm space-y-3 min-h-[220px]">
+            <div className="tarjeta p-4 space-y-3 min-h-[220px]">
                 <TablaProductos
                   filas={filas}
+                  catalogo={catalogo}
                   onEditar={editarFilaNueva}
                   onQuitar={quitarFilaNueva}
                   onEnter={(i, c) => manejarEnter(filas, setFilas, refsProducto, i, c)}
@@ -607,7 +817,7 @@ async function eliminarMovsSeleccionados() {
                 <button
                   type="button"
                   onClick={cancelarCompra}
-                  className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                  className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
                 >
                   Cancelar
                 </button>
@@ -616,12 +826,12 @@ async function eliminarMovsSeleccionados() {
             )}
 
             {modo === 'pago' && (
-              <form onSubmit={confirmarPago} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm space-y-3 min-h-[220px] flex flex-col justify-center">
+              <form onSubmit={confirmarPago} className="tarjeta p-4 space-y-3 min-h-[220px] flex flex-col justify-center">
                 <label className="block text-sm text-slate-600 dark:text-slate-300">
                   Monto pagado *
                   <input
                     type="number" inputMode="decimal" autoFocus
-                    className="mt-1 w-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                    className="mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
                     value={montoPago}
                     onChange={(e) => setMontoPago(e.target.value)}
                   />
@@ -633,7 +843,7 @@ async function eliminarMovsSeleccionados() {
                   <button
                     type="button"
                     onClick={cancelarPago}
-                    className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                    className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
                   >
                     Cancelar
                   </button>
@@ -643,13 +853,13 @@ async function eliminarMovsSeleccionados() {
 
             {/* Encabezado del historial */}
             <div className="flex items-center justify-between gap-2">
-              <h2 className="font-display font-semibold text-slate-700 dark:text-slate-200">
+              <h2 className="titulo-seccion">
                 {vista === 'activos' ? 'Historial' : 'Movimientos anulados'}
               </h2>
               {(cantAnulados > 0 || vista === 'anulados') && (
                 <button
                   onClick={() => { setVista(vista === 'activos' ? 'anulados' : 'activos'); cancelarSeleccionMovs(); }}
-                  className="text-xs px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-marca-500 transition-colors"
+                  className="text-xs px-3 py-1.5 rounded-full border-2 border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-marca-500 transition-colors"
                 >
                   {vista === 'activos' ? `Ver anulados (${cantAnulados})` : '← Volver al historial'}
                 </button>
@@ -676,7 +886,7 @@ async function eliminarMovsSeleccionados() {
               <select
                 value={orden}
                 onChange={(e) => setOrden(e.target.value)}
-                className="text-xs border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                className="text-xs border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
               >
                 <option value="recientes">Más recientes</option>
                 <option value="antiguos">Más antiguos</option>
@@ -742,12 +952,12 @@ async function eliminarMovsSeleccionados() {
                 return (<li
                   key={claveMov(m)}
                   onClick={() => seleccionandoMovs && editando !== m.id && toggleSeleccionMov(m)}
-                  className={`bg-white dark:bg-slate-800 border p-3 rounded-xl shadow-sm ${
+                  className={`tarjeta p-3 ${m.tipo === 'venta' ? 'border-l-[10px] border-l-red-500' : 'border-l-[10px] border-l-marca-500'} ${
                     seleccionandoMovs ? 'cursor-pointer' : ''
                   } ${
                     seleccionandoMovs && movsSeleccionados.has(claveMov(m))
                       ? 'border-marca-500 ring-2 ring-marca-200 dark:ring-marca-900'
-                      : 'border-slate-200 dark:border-slate-700'
+                      : ''
                   }`}
                 >
                   {m.tipo === 'venta' && editando === m.id ? (
@@ -755,6 +965,7 @@ async function eliminarMovsSeleccionados() {
                       <p className="font-semibold text-slate-700 dark:text-slate-200">Editando compra</p>
                       <TablaProductos
                         filas={filasEdit}
+                        catalogo={catalogo}
                         onEditar={editarFilaEdicion}
                         onQuitar={quitarFilaEdicion}
                         onEnter={(i, c) => manejarEnter(filasEdit, setFilasEdit, refsProductoEdit, i, c)}
@@ -769,7 +980,7 @@ async function eliminarMovsSeleccionados() {
                         <button onClick={guardarEdicion} className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-medium transition-colors">
                           Guardar cambios
                         </button>
-                        <button onClick={cancelarEdicion} className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">
+                        <button onClick={cancelarEdicion} className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300">
                           Cancelar
                         </button>
                       </div>
@@ -789,33 +1000,39 @@ async function eliminarMovsSeleccionados() {
                         {m.tipo === 'venta' ? (
                           <>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>Compra</p>
-                              <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 px-2 py-0.5 rounded-full font-medium">
+                              <p className={`font-display font-extrabold text-xl text-slate-900 dark:text-white ${m.anulado ? 'line-through' : ''}`}>Compra</p>
+                              <span className="text-xs bg-marca-100 dark:bg-marca-900 text-marca-700 dark:text-marca-300 border border-marca-600/40 px-2 py-0.5 rounded-full font-bold">
                                 {cantidadItems} producto{cantidadItems !== 1 ? 's' : ''}
                               </span>
                             </div>
-                            <ul className="text-xs text-slate-400 mt-1 space-y-0.5">
+                            <ul className="mt-2 pt-2 border-t-2 border-dashed border-slate-300 dark:border-slate-600 space-y-1.5">
                               {itemsVisibles.map((it, idx) => (
-                                <li key={idx}>{Number(it.cantidad)} x {it.producto} — {dinero(it.subtotal)}</li>
+                                <li key={idx} className="flex items-baseline justify-between gap-3 text-sm text-slate-800 dark:text-slate-100">
+                                  <span className="min-w-0">
+                                    <span className="numero font-extrabold text-marca-700 dark:text-marca-300">{Number(it.cantidad)}×</span>{' '}
+                                    <span className="font-medium">{it.producto}</span>
+                                  </span>
+                                  <span className="numero shrink-0 font-semibold text-slate-600 dark:text-slate-300">{dinero(it.subtotal)}</span>
+                                </li>
                               ))}
                             </ul>
                             {cantidadItems > 3 && (
                               <button
                                 onClick={() => toggleExpandido(m.id)}
-                                className="text-xs text-marca-600 dark:text-marca-400 underline mt-1"
+                                className="text-sm font-semibold text-marca-700 dark:text-marca-300 underline mt-2"
                               >
                                 {expandido ? 'Ver menos' : `Ver los ${cantidadItems} productos`}
                               </button>
                             )}
                           </>
                         ) : (
-                          <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>Pago recibido</p>
+                          <p className={`font-display font-extrabold text-xl text-slate-900 dark:text-white ${m.anulado ? 'line-through' : ''}`}>Pago recibido</p>
                         )}
-                        <p className="text-xs text-slate-400 mt-1">{fecha(m.fecha)}</p>
+                        <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mt-2">{fecha(m.fecha)}</p>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <p className={`numero font-bold ${m.anulado ? 'line-through opacity-50' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
+                        <p className={`numero font-display font-extrabold text-2xl ${m.anulado ? 'line-through opacity-50' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
                           {m.tipo === 'venta' ? '+' : '−'}{dinero(m.monto)}
                         </p>
 
@@ -840,7 +1057,7 @@ async function eliminarMovsSeleccionados() {
                               {m.tipo === 'venta' && (
                                 <button
                                   onClick={() => empezarEdicion(m)}
-                                  className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
+                                  className="text-xs font-medium px-3 py-1.5 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
                                 >
                                   Editar
                                 </button>
@@ -861,7 +1078,7 @@ async function eliminarMovsSeleccionados() {
                 );
               })}
               {movsVisibles.length === 0 && (
-                <p className="text-center text-slate-400 py-6">
+                <p className="text-center text-slate-600 dark:text-slate-300 py-6">
                   {vista === 'anulados' ? 'No hay movimientos anulados.' : 'No hay movimientos para mostrar.'}
                 </p>
               )}
