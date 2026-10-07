@@ -5,12 +5,67 @@ import {
   anularVenta, anularPago, eliminarVenta, eliminarPago,
   restaurarVenta, restaurarPago,
   archivarCliente, restaurarCliente ,
-  editarCliente, eliminarCliente, dinero, fecha, 
+  editarCliente, eliminarCliente, dinero, fecha, registrarAviso,
 } from './api';
 import { useCatalogo } from './CatalogoContext';
 import { flechasEnFormulario } from './teclado';
+import ThemeToggle from './ThemeToggle';
+import { hace, diasUltimoAviso, armarLinkWhatsApp, abrirWhatsApp } from './cobranza';
 
 const filaVacia = { producto: '', cantidad: '1', precio_unitario: '', total: '' };
+
+// Fecha de hoy como AAAA-MM-DD en hora LOCAL (toISOString usaría UTC y de noche daría "mañana")
+function hoy() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// Modo de carga de compra recordado en este navegador: 'rapida' (monto + descripción) o 'productos' (planilla)
+const CLAVE_MODO_COMPRA = 'compra_modo';
+function modoCompraGuardado() {
+  try {
+    return localStorage.getItem(CLAVE_MODO_COMPRA) === 'productos' ? 'productos' : 'rapida';
+  } catch {
+    return 'rapida';
+  }
+}
+function guardarModoCompra(m) {
+  try { localStorage.setItem(CLAVE_MODO_COMPRA, m); } catch { /* sin localStorage: no pasa nada */ }
+}
+
+// Compra rápida = una venta con un solo ítem de cantidad 1 (la descripción es el nombre del ítem)
+function esRapida(m) {
+  const items = m.items || [];
+  return m.tipo === 'venta' && items.length === 1 && Number(items[0].cantidad) === 1;
+}
+
+function itemsRapida(monto, descripcion) {
+  return [{ producto: descripcion.trim() || 'Compra', cantidad: 1, precio_unitario: Number(monto) }];
+}
+
+// Selector "Rápida / Con productos"
+function SelectorModoCompra({ valor, onCambiar }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {[['rapida', 'Rápida'], ['productos', 'Con productos']].map(([v, etiqueta]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onCambiar(v)}
+          className={`py-2 rounded-lg border-2 text-sm font-semibold transition-colors ${
+            valor === v
+              ? 'bg-slate-800 dark:bg-marca-600 border-slate-800 dark:border-marca-600 text-white'
+              : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
+          }`}
+        >
+          {etiqueta}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function actualizarFila(filas, i, campo, valor) {
   const nuevas = [...filas];
@@ -206,8 +261,8 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
   }
 
   const inputCls =
-    'w-full min-w-0 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-marca-500';
-  const labelCls = 'block text-xs font-bold text-slate-700 dark:text-slate-200 sm:hidden mb-0.5';
+    'w-full min-w-0 border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-marca-500';
+  const labelCls = 'block text-[11px] font-semibold text-slate-600 dark:text-slate-300 sm:hidden mb-0.5';
 
   const campo = (i, c, nombre) => ({
     ref: (el) => {
@@ -242,7 +297,7 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
 
   return (
     <div className="space-y-2">
-      <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_70px_100px_100px_28px] gap-2 text-sm font-bold text-slate-700 dark:text-slate-200 px-1">
+      <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_70px_110px_120px_28px] gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 px-1">
         <span>Producto</span>
         <span>Cant.</span>
         <span>P. unit.</span>
@@ -253,7 +308,7 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
       {filas.map((f, i) => (
         <div
           key={i}
-          className="grid grid-cols-3 gap-2 items-end border border-slate-200 dark:border-slate-700 rounded-lg p-2 sm:border-0 sm:p-0 sm:grid-cols-[minmax(0,1fr)_70px_100px_100px_28px] sm:items-center"
+          className="grid grid-cols-3 gap-2 items-end border-2 border-slate-500 dark:border-slate-600 rounded-lg p-2 sm:border-0 sm:p-0 sm:grid-cols-[minmax(0,1fr)_70px_110px_120px_28px] sm:items-center"
         >
           <div className="col-span-3 sm:col-span-1 flex items-center gap-2 min-w-0">
             <div className="flex-1 min-w-0 relative">
@@ -262,7 +317,7 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
               {abierto === i && sugerencias.length > 0 && (
                 <ul
                     ref={listaRef}
-                    className="absolute left-0 right-0 top-full mt-1 z-30 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 border-2 border-slate-800 dark:border-slate-400 rounded-lg shadow-xl"
+                    className="absolute left-0 right-0 top-full mt-1 z-30 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 border-2 border-slate-400 dark:border-slate-600 rounded-lg shadow-lg"
                   >
                   {sugerencias.map((p, idx) => (
                     <li key={p.id}>
@@ -280,12 +335,12 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
                         }`}
                       >
                         <span className="min-w-0">
-                          <span className="block truncate font-semibold text-slate-900 dark:text-white">{p.nombre}</span>
+                          <span className="block break-words text-slate-800 dark:text-slate-100">{p.nombre}</span>
                           {p.categoria && (
-                            <span className="block truncate text-xs font-medium text-slate-600 dark:text-slate-300">{p.categoria}</span>
+                            <span className="block break-words text-[11px] text-slate-700 dark:text-slate-300">{p.categoria}</span>
                           )}
                         </span>
-                        <span className="numero shrink-0 text-slate-500 dark:text-slate-300">
+                        <span className="numero shrink-0 text-slate-600 dark:text-slate-300">
                           {p.precio != null ? dinero(p.precio) : ''}
                         </span>
                       </button>
@@ -319,7 +374,7 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
       <button
         type="button"
         onClick={onAgregar}
-        className="w-full py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:border-marca-500 hover:text-marca-600 transition-colors"
+        className="w-full py-2 rounded-lg border border-dashed border-slate-500 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 transition-colors"
       >
         + Agregar producto
       </button>
@@ -340,9 +395,21 @@ export default function Cliente() {
 
   const [editando, setEditando] = useState(null);
   const [filasEdit, setFilasEdit] = useState([]);
+  const [fechaEdicion, setFechaEdicion] = useState('');
   const refsProductoEdit = useRef([]);
 
+  const [compraModo, setCompraModo] = useState(modoCompraGuardado); // 'rapida' | 'productos'
+  const [montoRapido, setMontoRapido] = useState('');
+  const [descRapida, setDescRapida] = useState('');
+
+  const [editModo, setEditModo] = useState('productos');
+  const [montoEdit, setMontoEdit] = useState('');
+  const [descEdit, setDescEdit] = useState('');
+
   const [montoPago, setMontoPago] = useState('');
+  const [descPago, setDescPago] = useState('');
+  const [fechaCompra, setFechaCompra] = useState(hoy);
+  const [fechaPago, setFechaPago] = useState(hoy);
   const [expandidos, setExpandidos] = useState(new Set());
   const [error, setError] = useState('');
 
@@ -375,11 +442,11 @@ export default function Cliente() {
 
 // Mientras haya una compra abierta (nueva o en edición), el catálogo puede sumarle productos
   useEffect(() => {
-    if (editando !== null) registrarDestino((p) => setFilasEdit((prev) => sumarProducto(prev, p)));
-    else if (modo === 'compra') registrarDestino((p) => setFilas((prev) => sumarProducto(prev, p)));
+    if (editando !== null && editModo === 'productos') registrarDestino((p) => setFilasEdit((prev) => sumarProducto(prev, p)));
+    else if (editando === null && modo === 'compra' && compraModo === 'productos') registrarDestino((p) => setFilas((prev) => sumarProducto(prev, p)));
     else registrarDestino(null);
     return () => registrarDestino(null);
-  }, [modo, editando, registrarDestino]);
+  }, [modo, compraModo, editando, editModo, registrarDestino]);
 
   function empezarEdicionCliente() {
     setFormCliente({
@@ -445,18 +512,33 @@ export default function Cliente() {
   function abrir(t) {
     setModo(modo === t ? null : t);
     setFilas([{ ...filaVacia }]);
+    setMontoRapido('');
+    setDescRapida('');
     setMontoPago('');
+    setDescPago('');
+    setFechaCompra(hoy());
+    setFechaPago(hoy());
     cancelarEdicion();
+  }
+
+  function cambiarModoCompra(m) {
+    setCompraModo(m);
+    guardarModoCompra(m);
   }
 
   function cancelarCompra() {
   setModo(null);
   setFilas([{ ...filaVacia }]);
+  setMontoRapido('');
+  setDescRapida('');
+  setFechaCompra(hoy());
   }
 
   function cancelarPago() {
     setModo(null);
     setMontoPago('');
+    setDescPago('');
+    setFechaPago(hoy());
   }
 
   function editarFilaNueva(i, campo, valor) {
@@ -480,9 +562,33 @@ export default function Cliente() {
       return;
     }
     try {
-      await crearVenta({ cliente_id: Number(id), items });
+      await crearVenta({ cliente_id: Number(id), items, fecha: fechaCompra || undefined });
       setModo(null);
       setFilas([{ ...filaVacia }]);
+      setFechaCompra(hoy());
+      cargar();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function confirmarCompraRapida(e) {
+    e.preventDefault();
+    if (!(Number(montoRapido) > 0)) {
+      setError('Ingresá un monto mayor a 0');
+      return;
+    }
+    try {
+      await crearVenta({
+        cliente_id: Number(id),
+        items: itemsRapida(montoRapido, descRapida),
+        fecha: fechaCompra || undefined,
+      });
+      setModo(null);
+      setMontoRapido('');
+      setDescRapida('');
+      setFechaCompra(hoy());
+      setError('');
       cargar();
     } catch (e) {
       setError(e.message);
@@ -492,6 +598,15 @@ export default function Cliente() {
   function empezarEdicion(m) {
     setModo(null);
     setEditando(m.id);
+    setFechaEdicion(String(m.fecha).slice(0, 10));
+    if (esRapida(m)) {
+      const nombre = m.items[0].producto;
+      setEditModo('rapida');
+      setMontoEdit(String(Number(m.monto)));
+      setDescEdit(nombre === 'Compra' ? '' : nombre);
+    } else {
+      setEditModo('productos');
+    }
     setFilasEdit(
       (m.items || []).map((it) => ({
         producto: it.producto,
@@ -505,6 +620,21 @@ export default function Cliente() {
   function cancelarEdicion() {
     setEditando(null);
     setFilasEdit([]);
+    setFechaEdicion('');
+    setEditModo('productos');
+    setMontoEdit('');
+    setDescEdit('');
+  }
+
+  // Pasa de la edición rápida a la planilla, conservando lo que ya estaba escrito
+  function editarConPlanilla() {
+    setFilasEdit([{
+      producto: descEdit.trim() || 'Compra',
+      cantidad: '1',
+      precio_unitario: montoEdit,
+      total: montoEdit,
+    }]);
+    setEditModo('productos');
   }
 
   function editarFilaEdicion(i, campo, valor) {
@@ -518,17 +648,26 @@ export default function Cliente() {
   const totalEdicion = filasEdit.reduce((acc, f) => acc + (Number(f.total) || 0), 0);
 
   async function guardarEdicion() {
-    const items = filasEdit.filter(filaCompleta).map((f) => ({
-      producto: f.producto.trim(),
-      cantidad: Number(f.cantidad),
-      precio_unitario: Number(f.precio_unitario),
-    }));
-    if (items.length === 0) {
-      setError('Cargá al menos un producto completo (nombre, cantidad y precio)');
-      return;
+    let items;
+    if (editModo === 'rapida') {
+      if (!(Number(montoEdit) > 0)) {
+        setError('Ingresá un monto mayor a 0');
+        return;
+      }
+      items = itemsRapida(montoEdit, descEdit);
+    } else {
+      items = filasEdit.filter(filaCompleta).map((f) => ({
+        producto: f.producto.trim(),
+        cantidad: Number(f.cantidad),
+        precio_unitario: Number(f.precio_unitario),
+      }));
+      if (items.length === 0) {
+        setError('Cargá al menos un producto completo (nombre, cantidad y precio)');
+        return;
+      }
     }
     try {
-      await editarVenta(editando, { items });
+      await editarVenta(editando, { items, fecha: fechaEdicion || undefined });
       cancelarEdicion();
       cargar();
     } catch (e) {
@@ -539,9 +678,16 @@ export default function Cliente() {
   async function confirmarPago(e) {
     e.preventDefault();
     try {
-      await crearPago({ cliente_id: Number(id), monto: Number(montoPago) });
+      await crearPago({
+        cliente_id: Number(id),
+        monto: Number(montoPago),
+        fecha: fechaPago || undefined,
+        observacion: descPago.trim() || undefined,
+      });
       setModo(null);
       setMontoPago('');
+      setDescPago('');
+      setFechaPago(hoy());
       cargar();
     } catch (e) {
       setError(e.message);
@@ -654,6 +800,19 @@ async function eliminarMovsSeleccionados() {
     });
   }
 
+  // Registra que se le avisó al cliente (para ver "último aviso")
+  async function marcarAviso() {
+    if (!window.confirm(`¿Registrar que le avisaste a ${cliente.nombre}?`)) return;
+    try {
+      await registrarAviso(Number(id), 'recordatorio');
+      cargar();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  const linkWhatsApp = cliente ? armarLinkWhatsApp(cliente) : null;
+
   // Historial: filtrado y ordenado
   const cantAnulados = movs.filter((m) => m.anulado).length;
 
@@ -671,18 +830,21 @@ async function eliminarMovsSeleccionados() {
 
   return (
     <div className="min-h-screen fondo-app">
-      <header className="cabecera p-4">
-          <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+      <header className="cabecera py-4">
+          <div className="max-w-3xl mx-auto px-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <button onClick={() => navigate(-1)} className="text-2xl leading-none shrink-0">←</button>
-              <h1 className="font-display font-bold text-xl truncate">{cliente ? cliente.nombre : 'Cliente'}</h1>
+              <h1 className="font-display font-extrabold text-2xl tracking-tight break-words leading-tight">{cliente ? cliente.nombre : 'Cliente'}</h1>
             </div>
-            <button
-              onClick={alternarCatalogo}
-              className="text-sm bg-black/15 hover:bg-black/25 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-            >
-              📦 Catálogo
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <ThemeToggle />
+              <button
+                onClick={alternarCatalogo}
+                className="text-sm bg-black/15 hover:bg-black/25 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                📦 Catálogo
+              </button>
+            </div>
           </div>
         </header>
 
@@ -706,20 +868,20 @@ async function eliminarMovsSeleccionados() {
                     <label key={campo} className="block text-sm text-slate-600 dark:text-slate-300">
                       {etiqueta}
                       <input
-                        className="mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                        className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
                         value={formCliente[campo]}
                         onChange={(e) => setFormCliente({ ...formCliente, [campo]: e.target.value })}
                       />
                     </label>
                   ))}
                   <div className="flex gap-2">
-                    <button className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-medium transition-colors">
+                    <button className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-semibold transition-colors">
                       Guardar cambios
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditandoCliente(false)}
-                      className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                      className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300"
                     >
                       Cancelar
                     </button>
@@ -732,19 +894,41 @@ async function eliminarMovsSeleccionados() {
                       Archivado
                     </span>
                   )}
-                  <p className="text-base font-bold text-slate-700 dark:text-slate-200">Saldo pendiente</p>
-                  <p className={`numero font-display text-5xl font-extrabold tracking-tight ${Number(cliente.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Saldo pendiente</p>
+                  <p className={`numero font-display text-3xl font-extrabold ${Number(cliente.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
                     {dinero(cliente.saldo)}
                   </p>
                   <div className="text-sm text-slate-600 dark:text-slate-300 mt-2 space-y-0.5">
                     {cliente.telefono && <p>Tel: {cliente.telefono}</p>}
                     {cliente.direccion && <p>{cliente.direccion}</p>}
                     {cliente.notas && <p className="italic">{cliente.notas}</p>}
+                    {!cliente.archivado && (
+                      <p className="text-xs pt-1">
+                        Último aviso: {diasUltimoAviso(cliente) == null ? 'nunca' : hace(diasUltimoAviso(cliente))}
+                      </p>
+                    )}
                   </div>
                  <div className="flex justify-center gap-2 mt-4 flex-wrap">
+                    {linkWhatsApp && (
+                      <a
+                        href={linkWhatsApp}
+                        onClick={(e) => { e.preventDefault(); abrirWhatsApp(linkWhatsApp); }}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+                      >
+                        💬 WhatsApp
+                      </a>
+                    )}
+                    {!cliente.archivado && (
+                      <button
+                        onClick={marcarAviso}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
+                      >
+                        Marcar aviso enviado
+                      </button>
+                    )}
                     <button
                       onClick={empezarEdicionCliente}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
                     >
                       Editar cliente
                     </button>
@@ -752,13 +936,13 @@ async function eliminarMovsSeleccionados() {
                       <>
                         <button
                           onClick={restaurar}
-                          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-marca-600 hover:bg-marca-700 text-white transition-colors"
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-marca-600 hover:bg-marca-700 text-white transition-colors"
                         >
                           Restaurar cliente
                         </button>
                         <button
                           onClick={eliminar}
-                          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
                         >
                           Eliminar definitivamente
                         </button>
@@ -766,7 +950,7 @@ async function eliminarMovsSeleccionados() {
                     ) : (
                       <button
                         onClick={archivar}
-                        className="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors"
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors"
                       >
                         Archivar cliente
                       </button>
@@ -780,13 +964,13 @@ async function eliminarMovsSeleccionados() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => abrir('compra')}
-                className={`boton-duro py-3 rounded-xl font-display font-extrabold text-lg text-white ${modo === 'compra' ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'}`}
+                className={`py-3 rounded-xl font-semibold text-white transition-colors ${modo === 'compra' ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'}`}
               >
                 + Compra
               </button>
               <button
                 onClick={() => abrir('pago')}
-                className={`boton-duro py-3 rounded-xl font-display font-extrabold text-lg text-white ${modo === 'pago' ? 'bg-marca-700' : 'bg-marca-600 hover:bg-marca-700'}`}
+                className={`py-3 rounded-xl font-semibold text-white transition-colors ${modo === 'pago' ? 'bg-marca-700' : 'bg-marca-600 hover:bg-marca-700'}`}
               >
                 + Pago
               </button>
@@ -794,6 +978,52 @@ async function eliminarMovsSeleccionados() {
 
            {modo === 'compra' && (
             <div className="tarjeta p-4 space-y-3 min-h-[220px]">
+              <SelectorModoCompra valor={compraModo} onCambiar={cambiarModoCompra} />
+              {compraModo === 'rapida' ? (
+                <form onSubmit={confirmarCompraRapida} className="space-y-3" onKeyDown={flechasEnFormulario}>
+                  <label className="block text-sm text-slate-600 dark:text-slate-300">
+                    Monto *
+                    <input
+                      type="number" inputMode="decimal" autoFocus
+                      className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                      value={montoRapido}
+                      onChange={(e) => setMontoRapido(e.target.value)}
+                    />
+                  </label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-300">
+                    Descripción (opcional)
+                    <input
+                      className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                      value={descRapida}
+                      onChange={(e) => setDescRapida(e.target.value)}
+                      placeholder="Ej: Mercadería, carne, arreglo..."
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    Fecha de la compra
+                    <input
+                      type="date"
+                      max={hoy()}
+                      value={fechaCompra}
+                      onChange={(e) => setFechaCompra(e.target.value)}
+                      className="border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <button className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2.5 rounded-lg font-semibold transition-colors">
+                      Confirmar compra
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelarCompra}
+                      className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              ) : (
+              <>
                 <TablaProductos
                   filas={filas}
                   catalogo={catalogo}
@@ -803,47 +1033,87 @@ async function eliminarMovsSeleccionados() {
                   onAgregar={() => agregarFila(filas, setFilas, refsProducto)}
                   refsProducto={refsProducto}
                 />
-                <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-700">
+                <label className="flex items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
+                  Fecha de la compra
+                  <input
+                    type="date"
+                    max={hoy()}
+                    value={fechaCompra}
+                    onChange={(e) => setFechaCompra(e.target.value)}
+                    className="border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                  />
+                </label>
+                <div className="flex justify-between items-center pt-2 border-t-2 border-slate-300 dark:border-slate-600">
                   <span className="font-semibold text-slate-700 dark:text-slate-200">Total compra</span>
                   <span className="numero font-bold text-lg text-slate-800 dark:text-slate-100">{dinero(totalCompra)}</span>
                 </div>
               <div className="flex gap-2">
                 <button
                   onClick={confirmarCompra}
-                  className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2.5 rounded-lg font-medium transition-colors"
+                  className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2.5 rounded-lg font-semibold transition-colors"
                 >
                   Confirmar compra
                 </button>
                 <button
                   type="button"
                   onClick={cancelarCompra}
-                  className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                  className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300"
                 >
                   Cancelar
                 </button>
               </div>
+              </>
+              )}
               </div>
             )}
 
             {modo === 'pago' && (
-              <form onSubmit={confirmarPago} className="tarjeta p-4 space-y-3 min-h-[220px] flex flex-col justify-center">
+              <form onSubmit={confirmarPago} onKeyDown={flechasEnFormulario} className="tarjeta p-4 space-y-3 min-h-[220px] flex flex-col justify-center">
                 <label className="block text-sm text-slate-600 dark:text-slate-300">
                   Monto pagado *
                   <input
                     type="number" inputMode="decimal" autoFocus
-                    className="mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                    className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
                     value={montoPago}
                     onChange={(e) => setMontoPago(e.target.value)}
                   />
                 </label>
+                <label className="block text-sm text-slate-600 dark:text-slate-300">
+                  Descripción (opcional)
+                  <input
+                    className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                    value={descPago}
+                    onChange={(e) => setDescPago(e.target.value)}
+                    placeholder="Ej: Efectivo, transferencia..."
+                  />
+                </label>
+                {Number(cliente.saldo) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMontoPago(String(Number(cliente.saldo)))}
+                    className="w-full text-sm font-semibold py-2 rounded-lg border border-marca-500 text-marca-600 dark:text-marca-400 hover:bg-marca-50 dark:hover:bg-marca-900 transition-colors"
+                  >
+                    Pagar todo ({dinero(cliente.saldo)})
+                  </button>
+                )}
+                <label className="flex items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
+                  Fecha del pago
+                  <input
+                    type="date"
+                    max={hoy()}
+                    value={fechaPago}
+                    onChange={(e) => setFechaPago(e.target.value)}
+                    className="border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                  />
+                </label>
                 <div className="flex gap-2">
-                  <button className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-medium transition-colors">
+                  <button className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-semibold transition-colors">
                     Guardar pago
                   </button>
                   <button
                     type="button"
                     onClick={cancelarPago}
-                    className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                    className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300"
                   >
                     Cancelar
                   </button>
@@ -853,13 +1123,13 @@ async function eliminarMovsSeleccionados() {
 
             {/* Encabezado del historial */}
             <div className="flex items-center justify-between gap-2">
-              <h2 className="titulo-seccion">
+              <h2 className="font-display font-semibold text-slate-700 dark:text-slate-200">
                 {vista === 'activos' ? 'Historial' : 'Movimientos anulados'}
               </h2>
               {(cantAnulados > 0 || vista === 'anulados') && (
                 <button
                   onClick={() => { setVista(vista === 'activos' ? 'anulados' : 'activos'); cancelarSeleccionMovs(); }}
-                  className="text-xs px-3 py-1.5 rounded-full border-2 border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-marca-500 transition-colors"
+                  className="text-xs px-3 py-1.5 rounded-full border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
                 >
                   {vista === 'activos' ? `Ver anulados (${cantAnulados})` : '← Volver al historial'}
                 </button>
@@ -872,10 +1142,10 @@ async function eliminarMovsSeleccionados() {
                 <button
                   key={valor}
                   onClick={() => setFiltroTipo(valor)}
-                  className={`text-xs px-3 py-1.5 rounded-full transition-colors ${
+                  className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
                     filtroTipo === valor
-                      ? 'bg-marca-600 text-white'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'
+                      ? 'bg-marca-600 border-marca-600 text-white'
+                      : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
                   }`}
                 >
                   {etiqueta}
@@ -886,7 +1156,7 @@ async function eliminarMovsSeleccionados() {
               <select
                 value={orden}
                 onChange={(e) => setOrden(e.target.value)}
-                className="text-xs border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                className="text-xs border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
               >
                 <option value="recientes">Más recientes</option>
                 <option value="antiguos">Más antiguos</option>
@@ -895,10 +1165,10 @@ async function eliminarMovsSeleccionados() {
               </select>
               <button
                 onClick={() => (seleccionandoMovs ? cancelarSeleccionMovs() : setSeleccionandoMovs(true))}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
                   seleccionandoMovs
                     ? 'bg-marca-600 border-marca-600 text-white'
-                    : 'border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-marca-500'
+                    : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
                 }`}
               >
                 {seleccionandoMovs ? 'Cancelar' : 'Seleccionar'}
@@ -917,14 +1187,14 @@ async function eliminarMovsSeleccionados() {
                     <button
                       onClick={restaurarMovsSeleccionados}
                       disabled={procesandoMovs || movsSeleccionados.size === 0}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-marca-600 hover:bg-marca-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-marca-600 hover:bg-marca-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       Restaurar
                     </button>
                     <button
                       onClick={eliminarMovsSeleccionados}
                       disabled={procesandoMovs || movsSeleccionados.size === 0}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       Eliminar
                     </button>
@@ -933,7 +1203,7 @@ async function eliminarMovsSeleccionados() {
                   <button
                     onClick={anularMovsSeleccionados}
                     disabled={procesandoMovs || movsSeleccionados.size === 0}
-                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     Anular
                   </button>
@@ -952,7 +1222,7 @@ async function eliminarMovsSeleccionados() {
                 return (<li
                   key={claveMov(m)}
                   onClick={() => seleccionandoMovs && editando !== m.id && toggleSeleccionMov(m)}
-                  className={`tarjeta p-3 ${m.tipo === 'venta' ? 'border-l-[10px] border-l-red-500' : 'border-l-[10px] border-l-marca-500'} ${
+                  className={`tarjeta-chica p-3 ${
                     seleccionandoMovs ? 'cursor-pointer' : ''
                   } ${
                     seleccionandoMovs && movsSeleccionados.has(claveMov(m))
@@ -963,6 +1233,36 @@ async function eliminarMovsSeleccionados() {
                   {m.tipo === 'venta' && editando === m.id ? (
                     <div className="space-y-3">
                       <p className="font-semibold text-slate-700 dark:text-slate-200">Editando compra</p>
+                      {editModo === 'rapida' ? (
+                        <div className="space-y-3" onKeyDown={flechasEnFormulario}>
+                          <label className="block text-sm text-slate-600 dark:text-slate-300">
+                            Monto *
+                            <input
+                              type="number" inputMode="decimal" autoFocus
+                              className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                              value={montoEdit}
+                              onChange={(e) => setMontoEdit(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); guardarEdicion(); } }}
+                            />
+                          </label>
+                          <label className="block text-sm text-slate-600 dark:text-slate-300">
+                            Descripción (opcional)
+                            <input
+                              className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                              value={descEdit}
+                              onChange={(e) => setDescEdit(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); guardarEdicion(); } }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={editarConPlanilla}
+                            className="text-xs text-marca-600 dark:text-marca-400 underline"
+                          >
+                            Editar con la planilla de productos
+                          </button>
+                        </div>
+                      ) : (
                       <TablaProductos
                         filas={filasEdit}
                         catalogo={catalogo}
@@ -972,15 +1272,26 @@ async function eliminarMovsSeleccionados() {
                         onAgregar={() => agregarFila(filasEdit, setFilasEdit, refsProductoEdit)}
                         refsProducto={refsProductoEdit}
                       />
-                      <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-700">
+                      )}
+                      <label className="flex items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
+                        Fecha de la compra
+                        <input
+                          type="date"
+                          max={hoy()}
+                          value={fechaEdicion}
+                          onChange={(e) => setFechaEdicion(e.target.value)}
+                          className="border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                        />
+                      </label>
+                      <div className="flex justify-between items-center pt-2 border-t-2 border-slate-300 dark:border-slate-600">
                         <span className="font-semibold text-slate-700 dark:text-slate-200">Total</span>
-                        <span className="numero font-bold text-slate-800 dark:text-slate-100">{dinero(totalEdicion)}</span>
+                        <span className="numero font-bold text-slate-800 dark:text-slate-100">{dinero(editModo === 'rapida' ? Number(montoEdit) || 0 : totalEdicion)}</span>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={guardarEdicion} className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-medium transition-colors">
+                        <button onClick={guardarEdicion} className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-semibold transition-colors">
                           Guardar cambios
                         </button>
-                        <button onClick={cancelarEdicion} className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300">
+                        <button onClick={cancelarEdicion} className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300">
                           Cancelar
                         </button>
                       </div>
@@ -997,42 +1308,45 @@ async function eliminarMovsSeleccionados() {
                         />
                       )}
                       <div className={`flex-1 ${m.anulado ? 'opacity-50' : ''}`}>
-                        {m.tipo === 'venta' ? (
+                        {esRapida(m) ? (
+                          <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>
+                            {m.items[0].producto}
+                          </p>
+                        ) : m.tipo === 'venta' ? (
                           <>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className={`font-display font-extrabold text-xl text-slate-900 dark:text-white ${m.anulado ? 'line-through' : ''}`}>Compra</p>
-                              <span className="text-xs bg-marca-100 dark:bg-marca-900 text-marca-700 dark:text-marca-300 border border-marca-600/40 px-2 py-0.5 rounded-full font-bold">
+                              <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>Compra</p>
+                              <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full font-medium">
                                 {cantidadItems} producto{cantidadItems !== 1 ? 's' : ''}
                               </span>
                             </div>
-                            <ul className="mt-2 pt-2 border-t-2 border-dashed border-slate-300 dark:border-slate-600 space-y-1.5">
+                            <ul className="text-xs text-slate-600 dark:text-slate-300 mt-1 space-y-0.5">
                               {itemsVisibles.map((it, idx) => (
-                                <li key={idx} className="flex items-baseline justify-between gap-3 text-sm text-slate-800 dark:text-slate-100">
-                                  <span className="min-w-0">
-                                    <span className="numero font-extrabold text-marca-700 dark:text-marca-300">{Number(it.cantidad)}×</span>{' '}
-                                    <span className="font-medium">{it.producto}</span>
-                                  </span>
-                                  <span className="numero shrink-0 font-semibold text-slate-600 dark:text-slate-300">{dinero(it.subtotal)}</span>
-                                </li>
+                                <li key={idx}>{Number(it.cantidad)} x {it.producto} — {dinero(it.subtotal)}</li>
                               ))}
                             </ul>
                             {cantidadItems > 3 && (
                               <button
                                 onClick={() => toggleExpandido(m.id)}
-                                className="text-sm font-semibold text-marca-700 dark:text-marca-300 underline mt-2"
+                                className="text-xs text-marca-600 dark:text-marca-400 underline mt-1"
                               >
                                 {expandido ? 'Ver menos' : `Ver los ${cantidadItems} productos`}
                               </button>
                             )}
                           </>
                         ) : (
-                          <p className={`font-display font-extrabold text-xl text-slate-900 dark:text-white ${m.anulado ? 'line-through' : ''}`}>Pago recibido</p>
+                          <>
+                            <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>Pago recibido</p>
+                            {m.observacion && (
+                              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{m.observacion}</p>
+                            )}
+                          </>
                         )}
-                        <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mt-2">{fecha(m.fecha)}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{fecha(m.fecha)}</p>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <p className={`numero font-display font-extrabold text-2xl ${m.anulado ? 'line-through opacity-50' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
+                        <p className={`numero font-bold ${m.anulado ? 'line-through opacity-50' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
                           {m.tipo === 'venta' ? '+' : '−'}{dinero(m.monto)}
                         </p>
 
@@ -1041,13 +1355,13 @@ async function eliminarMovsSeleccionados() {
                             <div className="flex items-center gap-2 justify-end mt-2">
                               <button
                                 onClick={() => restaurarMov(m)}
-                                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-marca-600 hover:bg-marca-700 text-white transition-colors"
+                                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-marca-600 hover:bg-marca-700 text-white transition-colors"
                               >
                                 Restaurar
                               </button>
                               <button
                                 onClick={() => eliminarMov(m)}
-                                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
+                                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
                               >
                                 Eliminar
                               </button>
@@ -1057,14 +1371,14 @@ async function eliminarMovsSeleccionados() {
                               {m.tipo === 'venta' && (
                                 <button
                                   onClick={() => empezarEdicion(m)}
-                                  className="text-xs font-medium px-3 py-1.5 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
+                                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
                                 >
                                   Editar
                                 </button>
                               )}
                               <button
                                 onClick={() => anular(m)}
-                                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
                               >
                                 Anular
                               </button>
@@ -1088,4 +1402,4 @@ async function eliminarMovsSeleccionados() {
       </main>
     </div>
   );
-}
+}

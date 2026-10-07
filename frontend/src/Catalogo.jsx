@@ -17,15 +17,15 @@ export default function Catalogo() {
   const puedeAcoplar = enVentana && window.screen.availWidth >= ANCHO_PANEL;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="bg-marca-700 text-white p-4 shadow-md">
-        <div className="max-w-3xl mx-auto flex justify-between items-center gap-3">
+    <div className="min-h-screen fondo-app">
+      <header className="cabecera py-4">
+        <div className="max-w-3xl mx-auto px-4 flex justify-between items-center gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {!enVentana && (
               <button onClick={() => navigate(-1)} className="text-2xl leading-none shrink-0">←</button>
             )}
             <div className="min-w-0">
-              <h1 className="font-display font-bold text-xl">Catálogo de productos</h1>
+              <h1 className="font-display font-extrabold text-2xl tracking-tight">Catálogo de productos</h1>
               <p className="text-xs text-marca-100 truncate">{nombreNegocio()}</p>
             </div>
           </div>

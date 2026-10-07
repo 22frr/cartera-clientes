@@ -5,7 +5,7 @@ import { dinero } from './api';
 const formVacio = { nombre: '', categoria: '', precio: '' };
 
 const inputCls =
-  'mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500';
+  'mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500';
 
 // Minúsculas y sin tildes, para que "cafe" encuentre "Café"
 function normalizar(s) {
@@ -85,14 +85,14 @@ export default function CatalogoContenido() {
         <div className="sticky top-0 z-10 -mx-1 px-1 pb-2 pt-3 space-y-2 fondo-liso">
           <div className="flex gap-2">
             <input
-              className="flex-1 min-w-0 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-marca-500"
+              className="flex-1 min-w-0 border-2 border-slate-400 dark:border-slate-700 rounded-lg px-3 py-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-marca-500"
               placeholder="Buscar producto..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />
             <button
               onClick={abrirNuevo}
-              className="bg-marca-600 hover:bg-marca-700 text-white px-4 rounded-lg font-medium transition-colors shrink-0"
+              className="bg-marca-600 hover:bg-marca-700 text-white px-4 rounded-lg font-semibold transition-colors shrink-0"
             >
               + Producto
             </button>
@@ -101,7 +101,7 @@ export default function CatalogoContenido() {
           <select
             value={categoriaFiltro}
             onChange={(e) => setCategoriaFiltro(e.target.value)}
-            className="w-full text-sm border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+            className="w-full text-sm border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
           >
             {categorias.map((c) => (
               <option key={c} value={c}>{c === 'todas' ? 'Todas las categorías' : c}</option>
@@ -152,13 +152,13 @@ export default function CatalogoContenido() {
             />
           </label>
           <div className="flex gap-2">
-            <button className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-medium transition-colors">
+            <button className="flex-1 bg-slate-800 hover:bg-slate-900 dark:bg-marca-600 dark:hover:bg-marca-700 text-white py-2 rounded-lg font-semibold transition-colors">
               {editando ? 'Guardar cambios' : 'Agregar producto'}
             </button>
             <button
               type="button"
               onClick={cancelar}
-              className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+              className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300"
             >
               Cancelar
             </button>
@@ -167,19 +167,19 @@ export default function CatalogoContenido() {
       )}
 
       {!mostrarForm && (
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {visibles.map((p) => {
             const sumable = puedeAgregar && p.activo;
             return (
               <li
                 key={p.id}
-                className={`tarjeta-chica transition-colors ${
+                className={`border-2 rounded-lg shadow-[1px_1px_0_0_rgb(var(--sombra))] transition-colors ${
                   agregado === p.id
                     ? 'border-marca-500 bg-marca-100 dark:bg-marca-900'
-                    : ''
-                } ${!p.activo ? 'opacity-50' : ''}`}
+                    : 'border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800'
+                } ${!p.activo ? 'opacity-60' : ''}`}
               >
-                <div className="flex items-center gap-1 p-2.5">
+                <div className="flex items-center gap-1 pl-2.5 pr-1 py-1">
                   <button
                     type="button"
                     disabled={!sumable}
@@ -187,14 +187,16 @@ export default function CatalogoContenido() {
                     className={`flex-1 min-w-0 flex items-center gap-2 text-left ${sumable ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <span className="flex-1 min-w-0">
-                      <span className="block truncate font-bold text-base text-slate-900 dark:text-white">{p.nombre}</span>
-                      <span className="block truncate text-sm font-medium text-slate-600 dark:text-slate-300">
-                        {p.categoria || 'Sin categoría'}{p.precio != null ? ` · ${dinero(p.precio)}` : ''}
-                        {!p.activo && ' · Inactivo'}
+                      <span className="block text-sm font-bold leading-tight break-words text-slate-900 dark:text-white">{p.nombre}</span>
+                      <span className="block text-xs font-medium leading-tight text-slate-700 dark:text-slate-300">
+                        {p.categoria || 'Sin categoría'}{!p.activo && ' · Inactivo'}
                       </span>
                     </span>
+                    {p.precio != null && (
+                      <span className="numero shrink-0 text-sm font-bold text-slate-900 dark:text-white">{dinero(p.precio)}</span>
+                    )}
                     {sumable && (
-                      <span className="shrink-0 w-7 h-7 rounded-full bg-marca-600 text-white flex items-center justify-center text-lg leading-none">
+                      <span className="shrink-0 w-6 h-6 rounded-full bg-marca-600 text-white flex items-center justify-center text-base leading-none">
                         {agregado === p.id ? '✓' : '+'}
                       </span>
                     )}
@@ -202,7 +204,7 @@ export default function CatalogoContenido() {
                   <button
                     type="button"
                     onClick={() => setMenuAbierto(menuAbierto === p.id ? null : p.id)}
-                    className="shrink-0 w-8 h-8 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    className="shrink-0 w-7 h-7 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                     title="Editar, desactivar o eliminar"
                   >
                     ⋯
@@ -210,22 +212,22 @@ export default function CatalogoContenido() {
                 </div>
 
                 {menuAbierto === p.id && (
-                  <div className="flex gap-2 px-2.5 pb-2.5">
+                  <div className="flex gap-2 px-2.5 pb-2">
                     <button
                       onClick={() => abrirEdicion(p)}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
                     >
                       Editar
                     </button>
                     <button
                       onClick={() => { cambiarActivo(p); setMenuAbierto(null); }}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors"
                     >
                       {p.activo ? 'Desactivar' : 'Activar'}
                     </button>
                     <button
                       onClick={() => borrar(p)}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
                     >
                       Eliminar
                     </button>
@@ -235,7 +237,7 @@ export default function CatalogoContenido() {
             );
           })}
           {visibles.length === 0 && (
-            <p className="text-center text-slate-600 dark:text-slate-300 py-6">No hay productos para mostrar.</p>
+            <p className="text-center text-slate-700 dark:text-slate-300 py-6">No hay productos para mostrar.</p>
           )}
         </ul>
       )}

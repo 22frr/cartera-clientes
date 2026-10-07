@@ -155,3 +155,11 @@ export const importarProductos = (productos) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ productos }),
   });
+
+// Avisos de cobranza: registra que se le mandó un recordatorio o la cuenta a un cliente
+export const registrarAviso = (clienteId, tipo) =>
+  pedir('/api/avisos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cliente_id: clienteId, tipo }),
+  });

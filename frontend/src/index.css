@@ -24,6 +24,10 @@
   --texto-sutil: 148 163 184;/* slate-400 */
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: 'Inter', system-ui, sans-serif;
   background-color: rgb(var(--fondo));
@@ -32,6 +36,11 @@ body {
 
 .numero {
   font-variant-numeric: tabular-nums;
+}
+
+/* Todo botón con el texto un poco más grueso: se nota mejor, sobre todo en modo claro */
+@layer base {
+  button { font-weight: 600; }
 }
 
 /* ---------- Estilo "libreta de fiado": papel cuadriculado + tinta + sombra dura ---------- */

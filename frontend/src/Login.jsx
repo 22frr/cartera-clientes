@@ -49,7 +49,7 @@ export default function Login() {
         <label className="block text-sm text-slate-600 dark:text-slate-300">
           Usuario
           <input
-            className="mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-marca-500"
+            className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-marca-500"
             value={usuario}
             onChange={(e) => setUsuario(e.target.value)}
             autoFocus
@@ -60,7 +60,7 @@ export default function Login() {
           Contraseña
           <input
             type="password"
-            className="mt-1 w-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-marca-500"
+            className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-marca-500"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -68,7 +68,7 @@ export default function Login() {
 
         <button
           disabled={cargando}
-          className="w-full bg-marca-600 hover:bg-marca-700 text-white py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+          className="w-full bg-marca-600 hover:bg-marca-700 text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50"
         >
           {cargando ? 'Ingresando...' : 'Ingresar'}
         </button>

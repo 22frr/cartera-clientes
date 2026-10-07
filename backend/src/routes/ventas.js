@@ -69,10 +69,13 @@ router.post('/', async (req, res) => {
 
 // Editar una compra (reemplaza todos sus productos)
 router.put('/:id', async (req, res) => {
-  const { items, observacion } = req.body;
+  const { items, observacion, fecha } = req.body;
 
   const errorItems = validarItems(items);
   if (errorItems) return res.status(400).json({ error: errorItems });
+  if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return res.status(400).json({ error: 'La fecha no es válida' });
+  }
 
   const client = await pool.connect();
   try {
@@ -101,8 +104,8 @@ router.put('/:id', async (req, res) => {
     }
 
     const { rows } = await client.query(
-      'UPDATE ventas SET total = $1, observacion = $2 WHERE id = $3 RETURNING *',
-      [total, observacion || null, req.params.id]
+      'UPDATE ventas SET total = $1, observacion = $2, fecha = COALESCE($4, fecha) WHERE id = $3 RETURNING *',
+      [total, observacion || null, req.params.id, fecha || null]
     );
 
     await client.query('COMMIT');

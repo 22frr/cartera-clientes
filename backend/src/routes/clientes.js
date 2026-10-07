@@ -5,11 +5,29 @@ import { requiereAuth } from '../auth.js';
 const router = Router();
 router.use(requiereAuth);
 
+// Datos de cobranza que se agregan a cada cliente (todos en días, null si no aplica):
+//  - dias_sin_pagar: solo si hoy debe algo. Días desde su último pago activo;
+//    si nunca pagó, desde su primera compra activa.
+//  - dias_ultimo_recordatorio / dias_ultima_cuenta: días desde el último aviso de ese tipo.
+const COLUMNAS_COBRANZA = `
+  CASE WHEN COALESCE(s.saldo, 0) > 0 THEN
+    CURRENT_DATE - COALESCE(
+      (SELECT MAX(p.fecha) FROM pagos p WHERE p.cliente_id = c.id AND NOT p.anulado),
+      (SELECT MIN(v.fecha) FROM ventas v WHERE v.cliente_id = c.id AND NOT v.anulado)
+    )
+  END AS dias_sin_pagar,
+  CURRENT_DATE - (SELECT MAX(a.creado_en) FROM avisos a
+                  WHERE a.cliente_id = c.id AND a.tipo = 'recordatorio')::date AS dias_ultimo_recordatorio,
+  CURRENT_DATE - (SELECT MAX(a.creado_en) FROM avisos a
+                  WHERE a.cliente_id = c.id AND a.tipo = 'cuenta')::date AS dias_ultima_cuenta
+`;
+
 router.get('/', async (req, res) => {
   const archivados = req.query.archivados === '1';
   try {
     const { rows } = await pool.query(`
-      SELECT c.*, COALESCE(s.saldo, 0) AS saldo
+      SELECT c.*, COALESCE(s.saldo, 0) AS saldo,
+        ${COLUMNAS_COBRANZA}
       FROM clientes c
       LEFT JOIN saldos s ON s.id = c.id
       WHERE c.negocio_id = $1 AND c.archivado = $2
@@ -25,7 +43,8 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT c.*, COALESCE(s.saldo, 0) AS saldo
+      SELECT c.*, COALESCE(s.saldo, 0) AS saldo,
+        ${COLUMNAS_COBRANZA}
       FROM clientes c
       LEFT JOIN saldos s ON s.id = c.id
       WHERE c.id = $1 AND c.negocio_id = $2
