@@ -4,6 +4,44 @@ import { dinero, nombreNegocio } from './api';
 export const DIAS_ATRASADO = 30;
 export const esAtrasado = (c) => Number(c.saldo) > 0 && c.dias_sin_pagar > DIAS_ATRASADO;
 
+// Colores por antigüedad de la deuda. Para cambiar cuándo cambia de color, tocar estos dos números:
+//   hasta DIAS_ATENCION días  -> reciente (neutro, sin alarma)
+//   hasta DIAS_ATRASADO días  -> atención (ámbar)
+//   más de DIAS_ATRASADO días -> atrasado (rojo)
+export const DIAS_ATENCION = 20;
+
+export const NIVELES = {
+  aldia: {
+    avatar: 'bg-marca-100 dark:bg-marca-900 text-marca-700 dark:text-marca-300',
+    monto: 'text-marca-600 dark:text-marca-400',
+    texto: 'font-semibold text-marca-700 dark:text-marca-400',
+  },
+  reciente: {
+    avatar: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200',
+    monto: 'text-slate-800 dark:text-slate-100',
+    texto: 'font-medium',
+  },
+  atencion: {
+    avatar: 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300',
+    monto: 'text-amber-700 dark:text-amber-400',
+    texto: 'font-bold text-amber-700 dark:text-amber-400',
+  },
+  atrasado: {
+    avatar: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
+    monto: 'text-red-600 dark:text-red-400',
+    texto: 'font-bold text-red-600 dark:text-red-400',
+  },
+};
+
+export function nivelDeuda(c) {
+  if (!(Number(c.saldo) > 0)) return 'aldia';
+  const d = c.dias_sin_pagar;
+  if (d == null) return 'reciente';
+  if (d > DIAS_ATRASADO) return 'atrasado';
+  if (d > DIAS_ATENCION) return 'atencion';
+  return 'reciente';
+}
+
 export function hace(d) {
   if (d === 0) return 'hoy';
   if (d === 1) return 'ayer';

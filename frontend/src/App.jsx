@@ -4,7 +4,7 @@ import { getClientes, getResumen, crearCliente, archivarCliente, restaurarClient
 import { useCatalogo } from './CatalogoContext';
 import ThemeToggle from './ThemeToggle';
 import { flechasEnFormulario } from './teclado';
-import { DIAS_ATRASADO, esAtrasado } from './cobranza';
+import { DIAS_ATRASADO, esAtrasado, NIVELES, nivelDeuda } from './cobranza';
 import LineaCobranza from './LineaCobranza';
 import AvisarDeudores from './AvisarDeudores';
 
@@ -425,7 +425,7 @@ export default function App() {
                 {seleccionando ? (
                   <button
                     onClick={() => toggleSeleccion(c.id)}
-                    className={`w-full text-left tarjeta p-4 flex justify-between items-center gap-3 min-h-[104px] transition-colors ${
+                    className={`w-full text-left tarjeta px-4 py-3 flex justify-between items-center gap-3 min-h-[92px] sm:min-h-[76px] transition-colors ${
                       seleccionados.has(c.id)
                         ? 'border-marca-500 ring-2 ring-marca-200 dark:ring-marca-900'
                         : ''
@@ -447,19 +447,17 @@ export default function App() {
                         </p>
                       </div>
                     </div>
-                    <p className={`numero font-bold shrink-0 ${Number(c.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
+                    <p className={`numero font-bold shrink-0 ${NIVELES[nivelDeuda(c)].monto}`}>
                       {dinero(c.saldo)}
                     </p>
                   </button>
                 ) : (
                   <Link
                     to={`/cliente/${c.id}${verArchivados ? '?desde=archivados' : ''}`}
-                    className="tarjeta p-4 flex justify-between items-center gap-3 min-h-[104px] hover:-translate-y-0.5 hover:border-marca-600 transition-transform"
+                    className="tarjeta px-4 py-3 flex justify-between items-center gap-3 min-h-[92px] sm:min-h-[76px] hover:-translate-y-0.5 hover:border-marca-600 transition-transform"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-marca-100 dark:bg-marca-900 text-marca-700 dark:text-marca-300 flex items-center justify-center font-display font-bold shrink-0">
-                        {c.nombre.charAt(0).toUpperCase()}
-                      </div>
+                      <InsigniaDias c={c} archivado={verArchivados} />
                       <div className="min-w-0">
                         <p className="font-display font-bold text-lg text-slate-900 dark:text-white break-words leading-tight">{c.nombre}</p>
                         <p className="text-sm text-slate-700 dark:text-slate-300 break-words">
@@ -468,7 +466,7 @@ export default function App() {
                         </p>
                       </div>
                     </div>
-                    <p className={`numero font-bold shrink-0 ${Number(c.saldo) > 0 ? 'text-red-500' : 'text-marca-500'}`}>
+                    <p className={`numero font-bold shrink-0 ${NIVELES[nivelDeuda(c)].monto}`}>
                       {dinero(c.saldo)}
                     </p>
                   </Link>
@@ -481,6 +479,29 @@ export default function App() {
           </ul>
         )}
       </main>
+    </div>
+  );
+}
+
+// Círculo a la izquierda de cada cliente: días sin pagar (con el color del nivel de deuda),
+// ✓ si está al día. En archivados no hay seguimiento de cobranza, así que muestra la inicial.
+function InsigniaDias({ c, archivado }) {
+  const base = `w-12 h-12 rounded-full flex flex-col items-center justify-center leading-none shrink-0 ${NIVELES[nivelDeuda(c)].avatar}`;
+
+  if (archivado) {
+    return <div className={`${base} font-display font-bold text-lg`}>{c.nombre.charAt(0).toUpperCase()}</div>;
+  }
+  if (!(Number(c.saldo) > 0)) {
+    return <div className={`${base} text-2xl font-bold`} title="Al día">✓</div>;
+  }
+  if (c.dias_sin_pagar == null) {
+    return <div className={`${base} text-xl font-bold`} title="Sin pagos registrados">—</div>;
+  }
+  const d = c.dias_sin_pagar;
+  return (
+    <div className={base} title={`Sin pagar ${d === 1 ? 'hace 1 día' : `hace ${d} días`}`}>
+      <span className={`numero font-display font-extrabold ${String(d).length > 3 ? 'text-sm' : 'text-lg'}`}>{d}</span>
+      <span className="text-[11px] font-semibold mt-0.5">{d === 1 ? 'día' : 'días'}</span>
     </div>
   );
 }
