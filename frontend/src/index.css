@@ -88,6 +88,20 @@ body {
   }
 }
 
+/* ---------- Avisos (toasts): misma tinta y sombra dura que las tarjetas ---------- */
+.toast {
+  border: 2px solid rgb(var(--linea));
+  border-radius: 0.75rem;
+  box-shadow: 3px 3px 0 0 rgb(var(--sombra));
+}
+@keyframes toast-entra { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toast-sale { from { opacity: 1; } to { opacity: 0; transform: translateY(6px); } }
+.toast-entra { animation: toast-entra 180ms ease-out; }
+.toast-sale { animation: toast-sale 180ms ease-in forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-entra, .toast-sale { animation: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .boton-duro, .boton-duro:hover, .boton-duro:active { transition: none; transform: none; }
 }

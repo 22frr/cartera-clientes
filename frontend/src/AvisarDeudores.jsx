@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { registrarAviso, dinero, nombreNegocio } from './api';
 import { armarLinkWhatsApp, abrirWhatsApp, mensajeRecordatorio } from './cobranza';
 import LineaCobranza from './LineaCobranza';
+import { useConfirmar } from './ConfirmContext';
 
 const tarjetaCls = 'tarjeta';
 
@@ -10,6 +11,7 @@ const tarjetaCls = 'tarjeta';
 // WhatsApp no deja enviar solo desde una página web, así que el "enviar" lo hacés vos;
 // acá queda registrado a quién ya se le avisó.
 export default function AvisarDeudores({ clientes, onCerrar }) {
+  const confirmar = useConfirmar();
   const puedeAvisar = (c) => !!armarLinkWhatsApp(c);
 
   const [fase, setFase] = useState('elegir'); // 'elegir' | 'enviando' | 'fin'
@@ -75,8 +77,15 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
     pasarAlSiguiente();
   }
 
-  function salir() {
-    if (fase === 'enviando' && !window.confirm('¿Salir? Los avisos que ya confirmaste quedan registrados.')) return;
+  async function salir() {
+    if (fase === 'enviando') {
+      const ok = await confirmar({
+        titulo: '¿Salir?',
+        texto: 'Los avisos que ya confirmaste quedan registrados.',
+        boton: 'Salir',
+      });
+      if (!ok) return;
+    }
     onCerrar();
   }
 

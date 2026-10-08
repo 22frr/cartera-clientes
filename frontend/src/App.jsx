@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getClientes, getResumen, crearCliente, archivarCliente, restaurarCliente, eliminarCliente, dinero, logout, nombreNegocio } from './api';
 import { useCatalogo } from './CatalogoContext';
+import { useToast, AvisoForm } from './ToastContext';
+import { useConfirmar } from './ConfirmContext';
 import ThemeToggle from './ThemeToggle';
 import { flechasEnFormulario } from './teclado';
 import { DIAS_ATRASADO, esAtrasado, NIVELES, nivelDeuda } from './cobranza';
@@ -56,6 +58,8 @@ export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const verArchivados = searchParams.get('archivados') === '1';
   const { alternarCatalogo } = useCatalogo();
+  const toast = useToast();
+  const confirmar = useConfirmar();
 
   const [clientes, setClientes] = useState([]);
   const [resumen, setResumen] = useState(null);
@@ -66,6 +70,7 @@ export default function App() {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [form, setForm] = useState({ nombre: '', telefono: '', direccion: '', notas: '' });
   const [error, setError] = useState('');
+  const [errorForm, setErrorForm] = useState('');
   const [seleccionando, setSeleccionando] = useState(false);
   const [seleccionados, setSeleccionados] = useState(new Set());
   const [procesando, setProcesando] = useState(false);
@@ -77,11 +82,18 @@ export default function App() {
       setResumen(r);
       setError('');
     } catch (e) {
-      setError('No se pudo conectar con el servidor: ' + e.message);
+      setError(e.message);
     }
   }
 
   useEffect(() => { cargar(); }, [verArchivados]);
+
+  // Otras pantallas avisan cuando algo cambia (ej. "Deshacer" de un archivado hecho en la ficha)
+  useEffect(() => {
+    const alCambiar = () => cargar();
+    window.addEventListener('clientes-cambiaron', alCambiar);
+    return () => window.removeEventListener('clientes-cambiaron', alCambiar);
+  }, [verArchivados]);
 
   function cancelarSeleccion() {
     setSeleccionando(false);
@@ -102,13 +114,19 @@ export default function App() {
 
   async function guardar(e) {
     e.preventDefault();
+    if (!form.nombre.trim()) {
+      setErrorForm('Escribí el nombre del cliente');
+      return;
+    }
+    setErrorForm('');
     try {
       await crearCliente(form);
+      toast.ok(`${form.nombre.trim()} agregado`);
       setForm({ nombre: '', telefono: '', direccion: '', notas: '' });
       setMostrarForm(false);
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
@@ -121,14 +139,28 @@ export default function App() {
   }
 
   async function archivarSeleccionados() {
-    if (!window.confirm(`¿Archivar ${seleccionados.size} cliente(s)? Conservan su historial y se pueden restaurar.`)) return;
+    const n = seleccionados.size;
+    const ok = await confirmar({
+      titulo: n === 1 ? '¿Archivar 1 cliente?' : `¿Archivar ${n} clientes?`,
+      texto: 'Conservan su historial y se pueden restaurar cuando quieras.',
+      boton: 'Archivar',
+    });
+    if (!ok) return;
     setProcesando(true);
     try {
-      await Promise.all([...seleccionados].map((id) => archivarCliente(id)));
+      const ids = [...seleccionados];
+      await Promise.all(ids.map((id) => archivarCliente(id)));
       cancelarSeleccion();
+      toast.deshacer(
+        ids.length === 1 ? 'Cliente archivado' : `${ids.length} clientes archivados`,
+        async () => {
+          await Promise.all(ids.map((id) => restaurarCliente(id)));
+          cargar();
+        }
+      );
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setProcesando(false);
     }
@@ -137,25 +169,36 @@ export default function App() {
   async function restaurarSeleccionados() {
     setProcesando(true);
     try {
+      const n = seleccionados.size;
       await Promise.all([...seleccionados].map((id) => restaurarCliente(id)));
       cancelarSeleccion();
+      toast.ok(n === 1 ? 'Cliente restaurado' : `${n} clientes restaurados`);
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setProcesando(false);
     }
   }
 
   async function eliminarSeleccionados() {
-    if (!window.confirm(`¿Eliminar definitivamente ${seleccionados.size} cliente(s)? Esto no se puede deshacer.`)) return;
+    const cant = seleccionados.size;
+    const ok = await confirmar({
+      titulo: cant === 1 ? '¿Eliminar 1 cliente?' : `¿Eliminar ${cant} clientes?`,
+      texto: 'Se borran también todas sus compras y pagos. Esto no se puede deshacer.',
+      boton: 'Eliminar',
+      peligro: true,
+    });
+    if (!ok) return;
     setProcesando(true);
     try {
+      const n = seleccionados.size;
       await Promise.all([...seleccionados].map((id) => eliminarCliente(id)));
       cancelarSeleccion();
+      toast.ok(n === 1 ? 'Cliente eliminado' : `${n} clientes eliminados`);
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     } finally {
       setProcesando(false);
     }
@@ -363,6 +406,7 @@ export default function App() {
 
         {mostrarForm && (
           <form onSubmit={guardar} className="tarjeta p-4 space-y-3" onKeyDown={flechasEnFormulario}>
+            {errorForm && <AvisoForm texto={errorForm} />}
             <Campo label="Nombre *" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} />
             <Campo label="Teléfono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
             <Campo label="Dirección" value={form.direccion} onChange={(v) => setForm({ ...form, direccion: v })} />
@@ -373,7 +417,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setMostrarForm(false)}
+                onClick={() => { setMostrarForm(false); setErrorForm(''); }}
                 className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300"
               >
                 Cancelar

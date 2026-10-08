@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from './api';
 import ThemeToggle from './ThemeToggle';
+import { useToast } from './ToastContext';
 
 export default function Login() {
   const [usuario, setUsuario] = useState('');
@@ -9,14 +10,27 @@ export default function Login() {
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
   const navigate = useNavigate();
+  const toast = useToast();
+
+  // Mensajes dejados por otras pantallas ("Tu sesión expiró", "Cerraste sesión")
+  useEffect(() => {
+    try {
+      const aviso = sessionStorage.getItem('aviso_login');
+      if (aviso) {
+        sessionStorage.removeItem('aviso_login');
+        toast.info(aviso);
+      }
+    } catch { /* sin sessionStorage: no pasa nada */ }
+  }, [toast]);
 
   async function enviar(e) {
     e.preventDefault();
     setError('');
     setCargando(true);
     try {
-      await login(usuario, password);
+      const datos = await login(usuario, password);
       navigate('/');
+      toast.ok(`¡Hola! Entraste a ${datos.negocio}`);
     } catch (e) {
       setError(e.message);
     } finally {

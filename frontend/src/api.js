@@ -2,33 +2,51 @@ function getToken() {
   return localStorage.getItem('token');
 }
 
+// Deja un mensaje para mostrarlo como aviso en la pantalla de login (sobrevive a la recarga)
+function avisoParaLogin(texto) {
+  try { sessionStorage.setItem('aviso_login', texto); } catch { /* sin sessionStorage: no pasa nada */ }
+}
+
 async function pedir(url, opciones = {}) {
   const token = getToken();
   const headers = { ...(opciones.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(url, { ...opciones, headers });
+  let res;
+  try {
+    res = await fetch(url, { ...opciones, headers });
+  } catch {
+    throw new Error('Sin conexión con el servidor. Revisá tu internet.');
+  }
 
   if (res.status === 401) {
     localStorage.removeItem('token');
     localStorage.removeItem('negocio');
+    avisoParaLogin('Tu sesión expiró. Ingresá de nuevo.');
     window.location.href = '/login';
     throw new Error('Sesión expirada');
   }
 
-  const datos = await res.json();
+  let datos = {};
+  try { datos = await res.json(); } catch { /* respuesta sin cuerpo */ }
   if (!res.ok) throw new Error(datos.error || 'Error en el servidor');
   return datos;
 }
 
 // Auth
 export async function login(usuario, password) {
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usuario, password }),
-  });
-  const datos = await res.json();
+  let res;
+  try {
+    res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, password }),
+    });
+  } catch {
+    throw new Error('Sin conexión con el servidor. Revisá tu internet.');
+  }
+  let datos = {};
+  try { datos = await res.json(); } catch { /* respuesta sin cuerpo */ }
   if (!res.ok) throw new Error(datos.error || 'Error al iniciar sesión');
   localStorage.setItem('token', datos.token);
   localStorage.setItem('negocio', datos.negocio);
@@ -38,6 +56,7 @@ export async function login(usuario, password) {
 export function logout() {
   localStorage.removeItem('token');
   localStorage.removeItem('negocio');
+  avisoParaLogin('Cerraste sesión. ¡Hasta pronto!');
 }
 
 export function estaLogueado() {

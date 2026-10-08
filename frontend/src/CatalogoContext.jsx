@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from './ToastContext';
 import {
   getProductos, crearProducto, editarProducto, activarProducto, eliminarProducto,
 } from './api';
@@ -29,6 +30,7 @@ function panelGuardado() {
 
 export function CatalogoProvider({ children }) {
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [productos, setProductos] = useState([]);
   const [error, setError] = useState('');
@@ -74,23 +76,27 @@ export function CatalogoProvider({ children }) {
 
   useEffect(() => { recargar(); }, [recargar]);
 
-  // Ejecuta una acción sobre el catálogo, recarga y avisa a las otras ventanas
-  const ejecutar = useCallback(async (accion) => {
+  // Ejecuta una acción sobre el catálogo, recarga, avisa en pantalla y avisa a las otras ventanas
+  const ejecutar = useCallback(async (accion, mensajeOk) => {
     try {
       await accion();
       await recargar();
       canal.current?.postMessage({ tipo: 'catalogo' });
+      if (mensajeOk) toast.ok(mensajeOk);
       return true;
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
       return false;
     }
-  }, [recargar]);
+  }, [recargar, toast]);
 
-  const crear = useCallback((datos) => ejecutar(() => crearProducto(datos)), [ejecutar]);
-  const editar = useCallback((id, datos) => ejecutar(() => editarProducto(id, datos)), [ejecutar]);
-  const cambiarActivo = useCallback((p) => ejecutar(() => activarProducto(p.id, !p.activo)), [ejecutar]);
-  const eliminar = useCallback((id) => ejecutar(() => eliminarProducto(id)), [ejecutar]);
+  const crear = useCallback((datos) => ejecutar(() => crearProducto(datos), 'Producto agregado'), [ejecutar]);
+  const editar = useCallback((id, datos) => ejecutar(() => editarProducto(id, datos), 'Producto actualizado'), [ejecutar]);
+  const cambiarActivo = useCallback(
+    (p) => ejecutar(() => activarProducto(p.id, !p.activo), p.activo ? 'Producto desactivado' : 'Producto activado'),
+    [ejecutar]
+  );
+  const eliminar = useCallback((id) => ejecutar(() => eliminarProducto(id), 'Producto eliminado'), [ejecutar]);
 
   const productosActivos = useMemo(() => productos.filter((p) => p.activo), [productos]);
 
@@ -143,9 +149,9 @@ export function CatalogoProvider({ children }) {
       popup.current = v;
       fijarPanel(false);
     } else {
-      setError('El navegador bloqueó la ventana emergente. Permitila para este sitio.');
+      toast.error('El navegador bloqueó la ventana emergente. Permitila para este sitio.');
     }
-  }, [fijarPanel]);
+  }, [fijarPanel, toast]);
 
   const alternarCatalogo = useCallback(() => {
     if (popup.current && !popup.current.closed) {

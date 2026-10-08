@@ -8,6 +8,8 @@ import {
   editarCliente, eliminarCliente, dinero, fecha, registrarAviso,
 } from './api';
 import { useCatalogo } from './CatalogoContext';
+import { useToast, AvisoForm } from './ToastContext';
+import { useConfirmar } from './ConfirmContext';
 import { flechasEnFormulario } from './teclado';
 import ThemeToggle from './ThemeToggle';
 import { hace, diasUltimoAviso, armarLinkWhatsApp, abrirWhatsApp } from './cobranza';
@@ -385,6 +387,8 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
 export default function Cliente() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
+  const confirmar = useConfirmar();
   const [cliente, setCliente] = useState(null);
   const [movs, setMovs] = useState([]);
   const [modo, setModo] = useState(null);
@@ -412,6 +416,7 @@ export default function Cliente() {
   const [fechaPago, setFechaPago] = useState(hoy);
   const [expandidos, setExpandidos] = useState(new Set());
   const [error, setError] = useState('');
+  const [errorForm, setErrorForm] = useState('');
 
   const [editandoCliente, setEditandoCliente] = useState(false);
   const [formCliente, setFormCliente] = useState({ nombre: '', telefono: '', direccion: '', notas: '' });
@@ -462,54 +467,74 @@ export default function Cliente() {
     e.preventDefault();
     try {
       await editarCliente(id, formCliente);
+      toast.ok('Datos del cliente guardados');
       setEditandoCliente(false);
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
   async function eliminar() {
     const deuda = Number(cliente.saldo) > 0
-      ? `\n\nOJO: este cliente todavía debe ${dinero(cliente.saldo)}.`
+      ? ` Todavía debe ${dinero(cliente.saldo)}.`
       : '';
-    const ok = window.confirm(
-      `¿Eliminar a ${cliente.nombre}? Se borran también todas sus compras y pagos. Esto no se puede deshacer.${deuda}`
-    );
+    const ok = await confirmar({
+      titulo: `¿Eliminar a ${cliente.nombre}?`,
+      texto: `Se borran también todas sus compras y pagos. Esto no se puede deshacer.${deuda}`,
+      boton: 'Eliminar',
+      peligro: true,
+    });
     if (!ok) return;
     try {
       await eliminarCliente(id);
       navigate(-1);
+      toast.ok('Cliente eliminado');
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
 
   async function archivar() {
-  const deuda = Number(cliente.saldo) > 0
-    ? `\n\nOJO: todavía debe ${dinero(cliente.saldo)}, y dejará de contar en el resumen mientras esté archivado.`
-    : '';
-  if (!window.confirm(`¿Archivar a ${cliente.nombre}? Desaparece de la lista pero conserva todo su historial y lo podés restaurar.${deuda}`)) return;
-  try {
-    await archivarCliente(id);
-    navigate(-1);
-  } catch (e) {
-    setError(e.message);
+    const nombre = cliente.nombre;
+    const debe = Number(cliente.saldo) > 0;
+    const idCliente = id;
+    const ok = await confirmar({
+      titulo: `¿Archivar a ${nombre}?`,
+      texto: 'Desaparece de la lista pero conserva todo su historial. Lo podés restaurar cuando quieras.'
+        + (debe ? ` Todavía debe ${dinero(cliente.saldo)} y no va a contar en el resumen mientras esté archivado.` : ''),
+      boton: 'Archivar',
+    });
+    if (!ok) return;
+    try {
+      await archivarCliente(idCliente);
+      navigate(-1);
+      toast.deshacer(
+        debe ? `${nombre} archivado. Su deuda no cuenta en el resumen.` : `${nombre} archivado`,
+        async () => {
+          await restaurarCliente(idCliente);
+          window.dispatchEvent(new Event('clientes-cambiaron'));
+        }
+      );
+    } catch (e) {
+      toast.error(e.message);
+    }
   }
-}
 
   async function restaurar() {
     try {
       await restaurarCliente(id);
+      toast.ok('Cliente restaurado');
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
   
   function abrir(t) {
+    setErrorForm('');
     setModo(modo === t ? null : t);
     setFilas([{ ...filaVacia }]);
     setMontoRapido('');
@@ -527,6 +552,7 @@ export default function Cliente() {
   }
 
   function cancelarCompra() {
+  setErrorForm('');
   setModo(null);
   setFilas([{ ...filaVacia }]);
   setMontoRapido('');
@@ -535,6 +561,7 @@ export default function Cliente() {
   }
 
   function cancelarPago() {
+    setErrorForm('');
     setModo(null);
     setMontoPago('');
     setDescPago('');
@@ -558,24 +585,25 @@ export default function Cliente() {
       precio_unitario: Number(f.precio_unitario),
     }));
     if (items.length === 0) {
-      setError('Cargá al menos un producto completo (nombre, cantidad y precio)');
+      setErrorForm('Cargá al menos un producto completo (nombre, cantidad y precio)');
       return;
     }
     try {
       await crearVenta({ cliente_id: Number(id), items, fecha: fechaCompra || undefined });
+      toast.ok(`Compra de ${dinero(totalCompra)} registrada`);
       setModo(null);
       setFilas([{ ...filaVacia }]);
       setFechaCompra(hoy());
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
   async function confirmarCompraRapida(e) {
     e.preventDefault();
     if (!(Number(montoRapido) > 0)) {
-      setError('Ingresá un monto mayor a 0');
+      setErrorForm('Ingresá un monto mayor a 0');
       return;
     }
     try {
@@ -584,6 +612,7 @@ export default function Cliente() {
         items: itemsRapida(montoRapido, descRapida),
         fecha: fechaCompra || undefined,
       });
+      toast.ok(`Compra de ${dinero(montoRapido)} registrada`);
       setModo(null);
       setMontoRapido('');
       setDescRapida('');
@@ -591,7 +620,7 @@ export default function Cliente() {
       setError('');
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
@@ -618,6 +647,7 @@ export default function Cliente() {
   }
 
   function cancelarEdicion() {
+    setErrorForm('');
     setEditando(null);
     setFilasEdit([]);
     setFechaEdicion('');
@@ -651,7 +681,7 @@ export default function Cliente() {
     let items;
     if (editModo === 'rapida') {
       if (!(Number(montoEdit) > 0)) {
-        setError('Ingresá un monto mayor a 0');
+        setErrorForm('Ingresá un monto mayor a 0');
         return;
       }
       items = itemsRapida(montoEdit, descEdit);
@@ -662,21 +692,26 @@ export default function Cliente() {
         precio_unitario: Number(f.precio_unitario),
       }));
       if (items.length === 0) {
-        setError('Cargá al menos un producto completo (nombre, cantidad y precio)');
+        setErrorForm('Cargá al menos un producto completo (nombre, cantidad y precio)');
         return;
       }
     }
     try {
       await editarVenta(editando, { items, fecha: fechaEdicion || undefined });
+      toast.ok('Compra actualizada');
       cancelarEdicion();
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
   async function confirmarPago(e) {
     e.preventDefault();
+    if (!(Number(montoPago) > 0)) {
+      setErrorForm('Ingresá un monto mayor a 0');
+      return;
+    }
     try {
       await crearPago({
         cliente_id: Number(id),
@@ -684,24 +719,30 @@ export default function Cliente() {
         fecha: fechaPago || undefined,
         observacion: descPago.trim() || undefined,
       });
+      toast.ok(`Pago de ${dinero(montoPago)} registrado`);
       setModo(null);
       setMontoPago('');
       setDescPago('');
       setFechaPago(hoy());
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
   async function anular(m) {
-    if (!window.confirm('¿Anular este movimiento? Quedará en el historial pero no cuenta en el saldo.')) return;
+    const esVenta = m.tipo === 'venta';
     try {
-      if (m.tipo === 'venta') await anularVenta(m.id);
+      if (esVenta) await anularVenta(m.id);
       else await anularPago(m.id);
       cargar();
+      toast.deshacer(esVenta ? 'Compra anulada' : 'Pago anulado', async () => {
+        if (esVenta) await restaurarVenta(m.id);
+        else await restaurarPago(m.id);
+        cargar();
+      });
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
@@ -709,20 +750,22 @@ export default function Cliente() {
   try {
     if (m.tipo === 'venta') await restaurarVenta(m.id);
     else await restaurarPago(m.id);
+    toast.ok(m.tipo === 'venta' ? 'Compra restaurada' : 'Pago restaurado');
     cargar();
   } catch (e) {
-    setError(e.message);
+    toast.error(e.message);
   }
 }
 
 async function eliminarMov(m) {
-  if (!window.confirm('¿Eliminar definitivamente este movimiento? Esto no se puede deshacer.')) return;
+  if (!(await confirmar({ titulo: '¿Eliminar este movimiento?', texto: 'Se borra definitivamente. Esto no se puede deshacer.', boton: 'Eliminar', peligro: true }))) return;
   try {
     if (m.tipo === 'venta') await eliminarVenta(m.id);
     else await eliminarPago(m.id);
+    toast.ok('Movimiento eliminado');
     cargar();
   } catch (e) {
-    setError(e.message);
+    toast.error(e.message);
   }
 }
 
@@ -750,14 +793,20 @@ function movsElegidos() {
 
 async function anularMovsSeleccionados() {
   const elegidos = movsElegidos();
-  if (!window.confirm(`¿Anular ${elegidos.length} movimiento(s)? Quedan en el historial pero no cuentan en el saldo.`)) return;
   setProcesandoMovs(true);
   try {
     await Promise.all(elegidos.map((m) => (m.tipo === 'venta' ? anularVenta(m.id) : anularPago(m.id))));
     cancelarSeleccionMovs();
     cargar();
+    toast.deshacer(
+      elegidos.length === 1 ? 'Movimiento anulado' : `${elegidos.length} movimientos anulados`,
+      async () => {
+        await Promise.all(elegidos.map((m) => (m.tipo === 'venta' ? restaurarVenta(m.id) : restaurarPago(m.id))));
+        cargar();
+      }
+    );
   } catch (e) {
-    setError(e.message);
+    toast.error(e.message);
   } finally {
     setProcesandoMovs(false);
   }
@@ -769,9 +818,10 @@ async function restaurarMovsSeleccionados() {
   try {
     await Promise.all(elegidos.map((m) => (m.tipo === 'venta' ? restaurarVenta(m.id) : restaurarPago(m.id))));
     cancelarSeleccionMovs();
+    toast.ok(elegidos.length === 1 ? 'Movimiento restaurado' : `${elegidos.length} movimientos restaurados`);
     cargar();
   } catch (e) {
-    setError(e.message);
+    toast.error(e.message);
   } finally {
     setProcesandoMovs(false);
   }
@@ -779,14 +829,15 @@ async function restaurarMovsSeleccionados() {
 
 async function eliminarMovsSeleccionados() {
   const elegidos = movsElegidos();
-  if (!window.confirm(`¿Eliminar definitivamente ${elegidos.length} movimiento(s)? Esto no se puede deshacer.`)) return;
+  if (!(await confirmar({ titulo: `¿Eliminar ${elegidos.length} movimiento${elegidos.length !== 1 ? 's' : ''}?`, texto: 'Se borran definitivamente. Esto no se puede deshacer.', boton: 'Eliminar', peligro: true }))) return;
   setProcesandoMovs(true);
   try {
     await Promise.all(elegidos.map((m) => (m.tipo === 'venta' ? eliminarVenta(m.id) : eliminarPago(m.id))));
     cancelarSeleccionMovs();
+    toast.ok(elegidos.length === 1 ? 'Movimiento eliminado' : `${elegidos.length} movimientos eliminados`);
     cargar();
   } catch (e) {
-    setError(e.message);
+    toast.error(e.message);
   } finally {
     setProcesandoMovs(false);
   }
@@ -802,12 +853,18 @@ async function eliminarMovsSeleccionados() {
 
   // Registra que se le avisó al cliente (para ver "último aviso")
   async function marcarAviso() {
-    if (!window.confirm(`¿Registrar que le avisaste a ${cliente.nombre}?`)) return;
+    const ok = await confirmar({
+      titulo: 'Registrar aviso',
+      texto: `Se anota que ya le avisaste a ${cliente.nombre} por su deuda.`,
+      boton: 'Registrar',
+    });
+    if (!ok) return;
     try {
       await registrarAviso(Number(id), 'recordatorio');
+      toast.ok('Aviso registrado');
       cargar();
     } catch (e) {
-      setError(e.message);
+      toast.error(e.message);
     }
   }
 
@@ -979,6 +1036,7 @@ async function eliminarMovsSeleccionados() {
            {modo === 'compra' && (
             <div className="tarjeta p-4 space-y-3 min-h-[220px]">
               <SelectorModoCompra valor={compraModo} onCambiar={cambiarModoCompra} />
+              {errorForm && <AvisoForm texto={errorForm} />}
               {compraModo === 'rapida' ? (
                 <form onSubmit={confirmarCompraRapida} className="space-y-3" onKeyDown={flechasEnFormulario}>
                   <label className="block text-sm text-slate-600 dark:text-slate-300">
@@ -1069,6 +1127,7 @@ async function eliminarMovsSeleccionados() {
 
             {modo === 'pago' && (
               <form onSubmit={confirmarPago} onKeyDown={flechasEnFormulario} className="tarjeta p-4 space-y-3 min-h-[220px] flex flex-col justify-center">
+                {errorForm && <AvisoForm texto={errorForm} />}
                 <label className="block text-sm text-slate-600 dark:text-slate-300">
                   Monto pagado *
                   <input
@@ -1233,6 +1292,7 @@ async function eliminarMovsSeleccionados() {
                   {m.tipo === 'venta' && editando === m.id ? (
                     <div className="space-y-3">
                       <p className="font-semibold text-slate-700 dark:text-slate-200">Editando compra</p>
+                      {errorForm && <AvisoForm texto={errorForm} />}
                       {editModo === 'rapida' ? (
                         <div className="space-y-3" onKeyDown={flechasEnFormulario}>
                           <label className="block text-sm text-slate-600 dark:text-slate-300">
@@ -1402,4 +1462,4 @@ async function eliminarMovsSeleccionados() {
       </main>
     </div>
   );
-}
+}

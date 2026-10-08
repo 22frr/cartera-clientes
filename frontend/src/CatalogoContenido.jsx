@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCatalogo } from './CatalogoContext';
 import { dinero } from './api';
+import { useConfirmar } from './ConfirmContext';
 
 const formVacio = { nombre: '', categoria: '', precio: '' };
 
@@ -21,6 +22,7 @@ export default function CatalogoContenido() {
     puedeAgregar, agregarProducto,
   } = useCatalogo();
 
+  const confirmar = useConfirmar();
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -56,7 +58,13 @@ export default function CatalogoContenido() {
   }
 
   async function borrar(p) {
-    if (!window.confirm(`¿Eliminar "${p.nombre}" del catálogo? No afecta las compras ya cargadas.`)) return;
+    const ok = await confirmar({
+      titulo: `¿Eliminar "${p.nombre}"?`,
+      texto: 'Sale del catálogo. No afecta las compras ya cargadas.',
+      boton: 'Eliminar',
+      peligro: true,
+    });
+    if (!ok) return;
     setMenuAbierto(null);
     await eliminar(p.id);
   }

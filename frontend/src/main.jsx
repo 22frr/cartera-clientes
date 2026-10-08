@@ -9,6 +9,8 @@ import Catalogo from './Catalogo.jsx';
 import Layout from './Layout.jsx';
 import { CatalogoProvider } from './CatalogoContext.jsx';
 import { estaLogueado } from './api.js';
+import { ToastProvider } from './ToastContext.jsx';
+import { ConfirmProvider } from './ConfirmContext.jsx';
 
 // Todo lo que está adentro exige sesión y comparte el catálogo.
 // El Provider vive acá arriba, así que no se destruye al navegar entre pantallas.
@@ -20,6 +22,8 @@ function Privada() {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
+    <ToastProvider>
+    <ConfirmProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -34,5 +38,7 @@ createRoot(document.getElementById('root')).render(
         </Route>
       </Routes>
     </BrowserRouter>
+    </ConfirmProvider>
+    </ToastProvider>
   </StrictMode>
 );
