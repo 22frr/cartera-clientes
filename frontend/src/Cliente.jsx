@@ -12,6 +12,7 @@ import { useToast, AvisoForm } from './ToastContext';
 import { useConfirmar } from './ConfirmContext';
 import { flechasEnFormulario } from './teclado';
 import ThemeToggle from './ThemeToggle';
+import { exportarCliente } from './excel';
 import { hace, diasUltimoAviso, armarLinkWhatsApp, abrirWhatsApp } from './cobranza';
 
 const filaVacia = { producto: '', cantidad: '1', precio_unitario: '', total: '' };
@@ -851,6 +852,15 @@ async function eliminarMovsSeleccionados() {
     });
   }
 
+  async function exportarExcel() {
+    try {
+      await exportarCliente(cliente, movs);
+      toast.ok('Excel del cliente generado');
+    } catch (e) {
+      toast.error(e.message || 'No se pudo generar el Excel');
+    }
+  }
+
   // Registra que se le avisó al cliente (para ver "último aviso")
   async function marcarAviso() {
     const ok = await confirmar({
@@ -983,6 +993,12 @@ async function eliminarMovsSeleccionados() {
                         Marcar aviso enviado
                       </button>
                     )}
+                    <button
+                      onClick={exportarExcel}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"
+                    >
+                      📤 Exportar
+                    </button>
                     <button
                       onClick={empezarEdicionCliente}
                       className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 hover:text-marca-600 dark:hover:text-marca-400 transition-colors"

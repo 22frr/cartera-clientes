@@ -98,6 +98,12 @@ export function CatalogoProvider({ children }) {
   );
   const eliminar = useCallback((id) => ejecutar(() => eliminarProducto(id), 'Producto eliminado'), [ejecutar]);
 
+  // Recarga el catálogo y avisa a las otras ventanas (lo usa la importación desde Excel)
+  const refrescar = useCallback(async () => {
+    await recargar();
+    canal.current?.postMessage({ tipo: 'catalogo' });
+  }, [recargar]);
+
   const productosActivos = useMemo(() => productos.filter((p) => p.activo), [productos]);
 
   // ---------- Comunicación entre ventanas ----------
@@ -173,7 +179,7 @@ export function CatalogoProvider({ children }) {
   }, []);
 
   const valor = {
-    productos, productosActivos, error,
+    productos, productosActivos, error, refrescar,
     crear, editar, cambiarActivo, eliminar,
     panelAbierto, anchoSuficiente,
     alternarCatalogo, cerrarPanel, abrirEnVentana, acoplar,

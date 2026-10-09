@@ -168,11 +168,19 @@ export const activarProducto = (id, activo) =>
 export const eliminarProducto = (id) =>
   pedir(`/api/productos/${id}`, { method: 'DELETE' });
 
-export const importarProductos = (productos) =>
+// probar = true: el servidor simula y devuelve los números sin guardar nada (vista previa)
+export const importarProductos = (productos, probar = false) =>
   pedir('/api/productos/importar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ productos }),
+    body: JSON.stringify({ productos, probar }),
+  });
+
+export const importarClientes = (clientes, probar = false) =>
+  pedir('/api/clientes/importar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientes, probar }),
   });
 
 // Avisos de cobranza: registra que se le mandó un recordatorio o la cuenta a un cliente

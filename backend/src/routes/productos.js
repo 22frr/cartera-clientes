@@ -105,26 +105,73 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Alta masiva, para importar desde el Excel
+// Alta masiva desde Excel. Con { probar: true } solo simula y devuelve los números, sin guardar.
+// Omite los productos que ya existen (mismo nombre) y los que repiten un código de barras.
 router.post('/importar', async (req, res) => {
-  const { productos } = req.body;
+  const { productos, probar } = req.body;
   if (!Array.isArray(productos) || productos.length === 0) {
     return res.status(400).json({ error: 'No hay productos para importar' });
   }
+  if (productos.length > 5000) {
+    return res.status(400).json({ error: 'Máximo 5000 productos por importación' });
+  }
+
+  const limpios = [];
+  for (const p of productos) {
+    const nombre = String(p.nombre ?? '').trim().slice(0, 150);
+    if (!nombre) continue;
+    const precio = p.precio === null || p.precio === undefined || p.precio === '' ? null : Number(p.precio);
+    limpios.push({
+      nombre,
+      categoria: String(p.categoria ?? '').trim().slice(0, 80) || null,
+      precio: precio !== null && Number.isFinite(precio) && precio >= 0 && precio < 1e10 ? precio : null,
+      codigo: String(p.codigo_barras ?? '').trim().slice(0, 50) || null,
+    });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    let insertados = 0;
-    for (const p of productos) {
-      if (!p.nombre || !p.nombre.trim()) continue;
-      await client.query(
-        `INSERT INTO productos (negocio_id, nombre, categoria, precio, codigo_barras) VALUES ($1,$2,$3,$4,$5)`,
-        [req.negocio_id, p.nombre.trim(), p.categoria || null, p.precio || null, p.codigo_barras || null]
-      );
-      insertados++;
+
+    const { rows: existentes } = await client.query(
+      'SELECT lower(nombre) AS n, codigo_barras FROM productos WHERE negocio_id = $1',
+      [req.negocio_id]
+    );
+    const nombres = new Set(existentes.map((e) => e.n));
+    const codigos = new Set(existentes.map((e) => e.codigo_barras).filter(Boolean));
+
+    const nuevos = [];
+    let yaExistian = 0;
+    let codigoRepetido = 0;
+    for (const p of limpios) {
+      const k = p.nombre.toLowerCase();
+      if (nombres.has(k)) { yaExistian++; continue; }
+      if (p.codigo && codigos.has(p.codigo)) { codigoRepetido++; continue; }
+      nombres.add(k);
+      if (p.codigo) codigos.add(p.codigo);
+      nuevos.push(p);
     }
+
+    let insertados = 0;
+    if (!probar && nuevos.length > 0) {
+      const r = await client.query(
+        `INSERT INTO productos (negocio_id, categoria, nombre, precio, codigo_barras)
+         SELECT $1, t.c, t.n, t.p, t.b
+         FROM unnest($2::text[], $3::text[], $4::numeric[], $5::text[]) AS t(c, n, p, b)
+         ON CONFLICT DO NOTHING`,
+        [
+          req.negocio_id,
+          nuevos.map((p) => p.categoria),
+          nuevos.map((p) => p.nombre),
+          nuevos.map((p) => p.precio),
+          nuevos.map((p) => p.codigo),
+        ]
+      );
+      insertados = r.rowCount;
+    }
+
     await client.query('COMMIT');
-    res.json({ ok: true, insertados });
+    res.json({ ok: true, nuevos: nuevos.length, insertados, ya_existian: yaExistian, codigo_repetido: codigoRepetido });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);

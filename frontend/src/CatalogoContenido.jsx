@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCatalogo } from './CatalogoContext';
 import { dinero } from './api';
+import ImportarExcel from './ImportarExcel';
 import { useConfirmar } from './ConfirmContext';
 
 const formVacio = { nombre: '', categoria: '', precio: '' };
@@ -19,10 +20,11 @@ function normalizar(s) {
 export default function CatalogoContenido() {
   const {
     productos, error, crear, editar, cambiarActivo, eliminar,
-    puedeAgregar, agregarProducto,
+    puedeAgregar, agregarProducto, refrescar,
   } = useCatalogo();
 
   const confirmar = useConfirmar();
+  const [importando, setImportando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -85,6 +87,10 @@ export default function CatalogoContenido() {
 
   return (
     <div className="space-y-3">
+      {importando && (
+        <ImportarExcel tipo="productos" onCerrar={() => setImportando(false)} onListo={refrescar} />
+      )}
+
       {error && (
         <div className="bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm mt-3">{error}</div>
       )}
@@ -115,6 +121,14 @@ export default function CatalogoContenido() {
               <option key={c} value={c}>{c === 'todas' ? 'Todas las categorías' : c}</option>
             ))}
           </select>
+
+          <button
+            type="button"
+            onClick={() => setImportando(true)}
+            className="text-xs px-3 py-1.5 rounded-full border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
+          >
+            📥 Importar desde Excel
+          </button>
 
           {puedeAgregar && (
             <p className="text-xs rounded-lg px-3 py-2 bg-marca-100 dark:bg-marca-900 text-marca-700 dark:text-marca-300">

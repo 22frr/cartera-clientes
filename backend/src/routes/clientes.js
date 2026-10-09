@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { requiereAuth } from '../auth.js';
+import { fechaRazonable, MENSAJE_FECHA } from '../fechas.js';
 
 const router = Router();
 router.use(requiereAuth);
@@ -169,5 +170,101 @@ router.patch('/:id/restaurar', async (req, res) => {
 });
 
 
+// Alta masiva desde Excel. Con { probar: true } solo simula y devuelve los números, sin guardar.
+// Los clientes con saldo_inicial > 0 se crean con una compra "Saldo inicial" (fecha = deuda_desde u hoy),
+// así el saldo y los "días sin pagar" quedan correctos desde el primer día.
+// Omite los que ya existen en el negocio (mismo nombre, incluso archivados) y los repetidos del archivo.
+router.post('/importar', async (req, res) => {
+  const { clientes, probar } = req.body;
+  if (!Array.isArray(clientes) || clientes.length === 0) {
+    return res.status(400).json({ error: 'No hay clientes para importar' });
+  }
+  if (clientes.length > 2000) {
+    return res.status(400).json({ error: 'Máximo 2000 clientes por importación' });
+  }
+
+  const limpios = [];
+  for (const c of clientes) {
+    const nombre = String(c.nombre ?? '').trim().slice(0, 100);
+    if (!nombre) continue;
+
+    const bruto = c.saldo_inicial;
+    const saldo = bruto === undefined || bruto === null || bruto === '' ? 0 : Number(bruto);
+    if (!Number.isFinite(saldo) || saldo < 0 || saldo >= 1e10) {
+      return res.status(400).json({ error: `El saldo de "${nombre}" no es válido` });
+    }
+    const desde = saldo > 0 && c.deuda_desde ? String(c.deuda_desde) : null;
+    if (desde && !fechaRazonable(desde)) {
+      return res.status(400).json({ error: `${MENSAJE_FECHA}: deuda de "${nombre}"` });
+    }
+
+    limpios.push({
+      nombre,
+      telefono: String(c.telefono ?? '').trim().slice(0, 30) || null,
+      direccion: String(c.direccion ?? '').trim().slice(0, 150) || null,
+      notas: String(c.notas ?? '').trim().slice(0, 500) || null,
+      saldo: Math.round(saldo * 100) / 100,
+      desde,
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: existentes } = await client.query(
+      'SELECT lower(trim(nombre)) AS n FROM clientes WHERE negocio_id = $1',
+      [req.negocio_id]
+    );
+    const vistos = new Set(existentes.map((e) => e.n));
+    const nuevos = limpios.filter((c) => {
+      const k = c.nombre.toLowerCase();
+      if (vistos.has(k)) return false;
+      vistos.add(k);
+      return true;
+    });
+
+    let creados = 0;
+    if (!probar) {
+      for (const c of nuevos) {
+        const { rows } = await client.query(
+          `INSERT INTO clientes (negocio_id, nombre, telefono, direccion, notas)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [req.negocio_id, c.nombre, c.telefono, c.direccion, c.notas]
+        );
+        creados++;
+        if (c.saldo > 0) {
+          const v = await client.query(
+            `INSERT INTO ventas (negocio_id, cliente_id, fecha, total, observacion)
+             VALUES ($1, $2, COALESCE($3::date, CURRENT_DATE), $4, 'Saldo inicial') RETURNING id`,
+            [req.negocio_id, rows[0].id, c.desde, c.saldo]
+          );
+          await client.query(
+            `INSERT INTO venta_items (venta_id, producto, cantidad, precio_unitario, subtotal)
+             VALUES ($1, 'Saldo inicial', 1, $2, $2)`,
+            [v.rows[0].id, c.saldo]
+          );
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    const conSaldo = nuevos.filter((c) => c.saldo > 0);
+    res.json({
+      ok: true,
+      nuevos: nuevos.length,
+      creados,
+      ya_existian: limpios.length - nuevos.length,
+      con_saldo: conSaldo.length,
+      total_saldo: Math.round(conSaldo.reduce((acc, c) => acc + c.saldo, 0) * 100) / 100,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(error);
+    res.status(500).json({ error: 'Error al importar clientes' });
+  } finally {
+    client.release();
+  }
+});
 
 export default router;

@@ -9,6 +9,9 @@ import { flechasEnFormulario } from './teclado';
 import { DIAS_ATRASADO, esAtrasado, NIVELES, nivelDeuda } from './cobranza';
 import LineaCobranza from './LineaCobranza';
 import AvisarDeudores from './AvisarDeudores';
+import ImportarExcel from './ImportarExcel';
+import { exportarClientes } from './excel';
+import MenuMas from './MenuMas';
 
 // Minúsculas y sin tildes, para que "jose" encuentre "José"
 function normalizar(s) {
@@ -71,6 +74,7 @@ export default function App() {
   const [form, setForm] = useState({ nombre: '', telefono: '', direccion: '', notas: '' });
   const [error, setError] = useState('');
   const [errorForm, setErrorForm] = useState('');
+  const [importando, setImportando] = useState(false);
   const [seleccionando, setSeleccionando] = useState(false);
   const [seleccionados, setSeleccionados] = useState(new Set());
   const [procesando, setProcesando] = useState(false);
@@ -234,6 +238,15 @@ export default function App() {
   // A quiénes se les puede avisar: los que deben y se ven con el filtro actual
   const conDeuda = visibles.filter((c) => Number(c.saldo) > 0);
 
+  async function exportar() {
+    try {
+      await exportarClientes(visibles, { archivados: verArchivados });
+      toast.ok(`Excel generado con ${visibles.length} cliente${visibles.length !== 1 ? 's' : ''}`);
+    } catch (e) {
+      toast.error(e.message || 'No se pudo generar el Excel');
+    }
+  }
+
   function limpiarFiltros() {
     setBusqueda('');
     setEstado('todos');
@@ -285,6 +298,10 @@ export default function App() {
       </header>
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">
+        {importando && (
+          <ImportarExcel tipo="clientes" onCerrar={() => setImportando(false)} onListo={cargar} />
+        )}
+
         {error && (
           <div className="bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 p-3 rounded-lg">{error}</div>
         )}
@@ -301,9 +318,9 @@ export default function App() {
           <button
             type="button"
             onClick={() => { setEstado('atrasados'); setOrden('antiguedad'); }}
-            className="w-full text-left text-sm rounded-xl px-4 py-3 bg-amber-50 dark:bg-amber-950 border-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors"
+            className="w-full text-left text-xs sm:text-sm rounded-xl px-3 py-2 bg-amber-50 dark:bg-amber-950 border-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors"
           >
-            ⚠️ {cantAtrasados === 1 ? '1 cliente lleva' : `${cantAtrasados} clientes llevan`} más de {DIAS_ATRASADO} días sin pagar.{' '}
+            ⚠️ {cantAtrasados === 1 ? '1 cliente' : `${cantAtrasados} clientes`} con más de {DIAS_ATRASADO} días sin pagar.{' '}
             <span className="underline font-medium">Ver</span>
           </button>
         )}
@@ -329,14 +346,14 @@ export default function App() {
 
         {!mostrarForm && (
           <div className="space-y-2">
-            {/* Estado + orden */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex gap-1.5">
+            {/* Filtros: en el celular se deslizan hacia los costados si no entran */}
+            <div className="-mx-4 px-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex gap-1.5 w-max">
                 {ESTADOS.map(([valor, etiqueta]) => (
                   <button
                     key={valor}
                     onClick={() => setEstado(valor)}
-                    className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
+                    className={`text-xs px-3 py-1.5 rounded-full border-2 whitespace-nowrap transition-colors ${
                       estado === valor
                         ? 'bg-marca-600 border-marca-600 text-white'
                         : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
@@ -346,10 +363,24 @@ export default function App() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Contador + orden */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap min-w-0 text-xs text-slate-600 dark:text-slate-300">
+                <span className="whitespace-nowrap">
+                  {visibles.length} cliente{visibles.length !== 1 ? 's' : ''}
+                </span>
+                {hayFiltros && (
+                  <button onClick={limpiarFiltros} className="underline text-marca-600 dark:text-marca-400 whitespace-nowrap">
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
               <select
                 value={orden}
                 onChange={(e) => setOrden(e.target.value)}
-                className="text-xs border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                className="shrink-0 text-xs border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
               >
                 {ORDENES.map(([valor, etiqueta]) => (
                   <option key={valor} value={valor}>{etiqueta}</option>
@@ -357,49 +388,49 @@ export default function App() {
               </select>
             </div>
 
-            {/* Contador + acciones */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <span>
-                  {visibles.length} cliente{visibles.length !== 1 ? 's' : ''}
-                </span>
-                {hayFiltros && (
-                  <button
-                    onClick={limpiarFiltros}
-                    className="underline text-marca-600 dark:text-marca-400"
-                  >
-                    Limpiar filtros
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {!verArchivados && conDeuda.length > 0 && (
-                  <button
-                    onClick={() => setAvisando(true)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-full border-2 border-marca-600 hover:border-marca-700 bg-marca-600 hover:bg-marca-700 text-white transition-colors"
-                  >
-                    📣 Avisar ({conDeuda.length})
-                  </button>
-                )}
-                {!verArchivados && (
-                  <button
-                    onClick={irAArchivados}
-                    className="text-xs px-3 py-1.5 rounded-full border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
-                  >
-                    Ver archivados
-                  </button>
-                )}
+            {/* Acciones: lo de todos los días a la vista, el resto en "Más" */}
+            <div className="flex items-center justify-end gap-2">
+              {!verArchivados && conDeuda.length > 0 && (
                 <button
-                  onClick={() => (seleccionando ? cancelarSeleccion() : setSeleccionando(true))}
-                  className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
-                    seleccionando
-                      ? 'bg-marca-600 border-marca-600 text-white'
-                      : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
-                  }`}
+                  onClick={() => setAvisando(true)}
+                  className="mr-auto text-xs font-semibold px-3 py-1.5 rounded-full border-2 border-marca-600 hover:border-marca-700 bg-marca-600 hover:bg-marca-700 text-white transition-colors"
                 >
-                  {seleccionando ? 'Cancelar' : 'Seleccionar'}
+                  📣 Avisar ({conDeuda.length})
                 </button>
-              </div>
+              )}
+              <button
+                onClick={() => (seleccionando ? cancelarSeleccion() : setSeleccionando(true))}
+                className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
+                  seleccionando
+                    ? 'bg-marca-600 border-marca-600 text-white'
+                    : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
+                }`}
+              >
+                {seleccionando ? 'Cancelar' : 'Seleccionar'}
+              </button>
+              <MenuMas
+                items={[
+                  !verArchivados && {
+                    icono: '📥',
+                    titulo: 'Importar desde Excel',
+                    detalle: 'Cargar clientes, con su saldo inicial',
+                    onClick: () => setImportando(true),
+                  },
+                  {
+                    icono: '📤',
+                    titulo: 'Exportar a Excel',
+                    detalle: visibles.length > 0 ? 'Descargar la lista que estás viendo' : 'No hay clientes para exportar',
+                    deshabilitado: visibles.length === 0,
+                    onClick: exportar,
+                  },
+                  !verArchivados && {
+                    icono: '🗂️',
+                    titulo: 'Ver archivados',
+                    detalle: 'Clientes que ocultaste de la lista',
+                    onClick: irAArchivados,
+                  },
+                ]}
+              />
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { requiereAuth } from '../auth.js';
+import { fechaRazonable, MENSAJE_FECHA } from '../fechas.js';
 
 const router = Router();
 router.use(requiereAuth);
@@ -22,6 +23,7 @@ router.post('/', async (req, res) => {
   const { cliente_id, items, fecha, observacion } = req.body;
 
   if (!cliente_id) return res.status(400).json({ error: 'Falta el cliente' });
+  if (fecha && !fechaRazonable(fecha)) return res.status(400).json({ error: MENSAJE_FECHA });
   const errorItems = validarItems(items);
   if (errorItems) return res.status(400).json({ error: errorItems });
 
@@ -73,8 +75,8 @@ router.put('/:id', async (req, res) => {
 
   const errorItems = validarItems(items);
   if (errorItems) return res.status(400).json({ error: errorItems });
-  if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-    return res.status(400).json({ error: 'La fecha no es válida' });
+  if (fecha && !fechaRazonable(fecha)) {
+    return res.status(400).json({ error: MENSAJE_FECHA });
   }
 
   const client = await pool.connect();

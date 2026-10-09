@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { requiereAuth } from '../auth.js';
+import { fechaRazonable, MENSAJE_FECHA } from '../fechas.js';
 
 const router = Router();
 router.use(requiereAuth);
@@ -10,6 +11,7 @@ router.post('/', async (req, res) => {
   if (!cliente_id || !monto || Number(monto) <= 0) {
     return res.status(400).json({ error: 'Cliente y monto (mayor a 0) son obligatorios' });
   }
+  if (fecha && !fechaRazonable(fecha)) return res.status(400).json({ error: MENSAJE_FECHA });
   try {
     const dueño = await pool.query(
       'SELECT id FROM clientes WHERE id=$1 AND negocio_id=$2',
