@@ -105,3 +105,12 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .boton-duro, .boton-duro:hover, .boton-duro:active { transition: none; transform: none; }
 }
+
+
+/* Se pone unos instantes al cambiar de tema, para que todo cambie junto y sin demora */
+.sin-transiciones,
+.sin-transiciones *,
+.sin-transiciones *::before,
+.sin-transiciones *::after {
+  transition: none !important;
+}

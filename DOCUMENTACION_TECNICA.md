@@ -1,7 +1,7 @@
 # Sistema de cartera de clientes y cuenta corriente
 
 **Documento técnico y de producto**
-Última actualización: 09/10/2026
+Última actualización: 13/10/2026
 
 ---
 
@@ -19,7 +19,7 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 - Alta, edición, archivado y eliminación.
 - Búsqueda sin distinguir tildes ni mayúsculas ("jose" encuentra "José").
 - Filtros (Todos / Deben / Atrasados / Al día) y 6 criterios de orden. Se recuerdan mientras la pestaña esté abierta, así al entrar a un cliente y volver la lista sigue como estaba.
-- Selección múltiple para archivar, restaurar o eliminar en bloque.
+- Selección múltiple para archivar, restaurar o eliminar en bloque, con botón **Todos / Ninguno** junto a la acción principal. Selecciona solo los clientes que se ven con el filtro actual.
 
 **Compras y pagos**
 - Compra **rápida** (monto + descripción opcional) o **con productos** (planilla con varios productos, cálculo automático de cantidad × precio = total y viceversa, navegación con Enter y flechas). El modo elegido se recuerda en el navegador.
@@ -28,7 +28,8 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 - Pagos parciales o totales (botón "Pagar todo").
 - Edición de compras ya cargadas.
 - Saldo automático por cliente: compras activas − pagos activos.
-- Anular (reversible), restaurar y eliminar definitivamente (solo lo ya anulado). Selección múltiple de movimientos.
+- Anular (reversible), restaurar y eliminar definitivamente (solo lo ya anulado). Selección múltiple de movimientos, con botón **Todos / Ninguno** (solo los movimientos visibles con el filtro y la vista actuales).
+- **Deshacer** al registrar una compra desde el aviso en pantalla: la compra se anula y se elimina, sin dejar rastro en "anulados".
 - Historial filtrable por tipo y ordenable por fecha o monto, con vista separada de anulados.
 
 **Cobranza**
@@ -53,7 +54,8 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 - Avisos en pantalla (toasts) para todo resultado de una acción, con "Deshacer" en anular y archivar.
 - Ventana de confirmación propia para acciones irreversibles.
 - Menú "⋯ Más" para las acciones ocasionales.
-- Modo claro/oscuro, uso desde computadora y celular (responsive), acceso por red local sin internet.
+- **Pantallas siempre actualizadas:** cualquier cambio (compra, pago, anulación, "Deshacer"...) recarga solas las pantallas abiertas, tanto en la misma pestaña como en otras pestañas o ventanas, y al volver a una pestaña que quedó en segundo plano (ver 5.19).
+- Modo claro/oscuro con cambio instantáneo (sin retrasos de animación), uso desde computadora y celular (responsive), acceso por red local sin internet.
 
 **Plataforma**
 - Autenticación por usuario y contraseña, con sesión de 30 días.
@@ -92,6 +94,8 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 | RF12 | Exportar a Excel la lista de clientes y el detalle de un cliente. |
 | RF13 | Identificar clientes atrasados y registrar los avisos de cobranza enviados. |
 | RF14 | Rechazar fechas inverosímiles (futuras o de más de 10 años de antigüedad) en compras, pagos e importaciones. |
+| RF15 | Mantener sincronizadas las pantallas abiertas (misma pestaña u otras) cuando cambian los datos, sin tener que refrescar. |
+| RF16 | Permitir seleccionar todos los elementos visibles en toda pantalla con selección múltiple. |
 
 ### 3.2 Requerimientos no funcionales
 
@@ -138,6 +142,7 @@ kiosco-app/
 │       ├── cobranza.js            Reglas de cobranza, teléfonos y WhatsApp
 │       ├── excel.js               Lectura de Excel, plantillas y exportaciones
 │       ├── teclado.js             Flechas ↑ ↓ entre campos de un formulario
+│       ├── sync.js                Aviso de cambios entre pantallas y pestañas (recarga automática)
 │       └── index.css              Tema (variables claro/oscuro) y estilo "libreta"
 └── backend/
     └── src/
@@ -191,6 +196,7 @@ Las compras (`ventas`) y sus productos (`venta_items`) están separados para per
 - **Estado compartido** solo donde hace falta (catálogo, avisos, confirmaciones). El resto es estado local de cada pantalla.
 - **Sincronización entre ventanas** del catálogo con `BroadcastChannel`.
 - **Eventos de ventana:** `clientes-cambiaron` avisa a la lista que recargue (lo usa el "Deshacer" de un archivado hecho desde la ficha).
+- **Sincronización de datos (`sync.js`):** `api.js` llama a `avisarCambio()` después de toda petición que modifica datos (POST, PUT, PATCH, DELETE, salvo `/api/productos`). Las pantallas `App.jsx` y `Cliente.jsx` se suscriben con `alCambiarDatos(cargar)` y se recargan solas. Ver 5.19.
 
 ## 5. Decisiones de diseño relevantes
 
@@ -214,6 +220,10 @@ Estas decisiones no son obvias leyendo solo el código, así que quedan document
 16. **Acciones por frecuencia de uso:** lo de todos los días (Avisar, Seleccionar) queda a la vista; lo ocasional (importar, exportar, ver archivados) va en "⋯ Más".
 17. **Ventanas modales con portal:** el panel del catálogo usa `transform`, que atrapa a los elementos `fixed` hijos. Los modales que se abren desde el panel (importación) se montan en `document.body`.
 18. **Recordatorio por WhatsApp asistido:** WhatsApp no permite enviar solo desde una página web. El sistema arma el mensaje y abre el chat; la persona lo envía y confirma, y queda registrado.
+19. **Sincronización automática de pantallas (`sync.js`):** cada pantalla tiene su propio estado y antes solo recargaba al montarse, así que un cambio hecho en otra pestaña, o un "Deshacer" tocado desde otra pantalla, no se veía hasta refrescar. Ahora `api.js` avisa cada modificación (así no hay que acordarse de avisar en cada acción) por dos vías: un evento de `window` para la misma pestaña y un `BroadcastChannel` (`cartera-datos`) para las demás. Las pantallas también recargan al volver a la pestaña (`visibilitychange` / `focus`). Los eventos se agrupan con 150 ms de espera para recargar una sola vez. Consecuencia aceptada: cada acción recarga además la pantalla actual con un GET extra. Los cambios del catálogo (`/api/productos`) quedan fuera porque ya se sincronizan con el `BroadcastChannel` propio de `CatalogoContext`.
+20. **"Deshacer" al registrar una compra elimina, no anula:** deshacer una carga recién hecha debe dejar todo como estaba. Si solo anulara, cada error de tipeo dejaría una compra en "Ver anulados". Se hace con `anularVenta` + `eliminarVenta` (el servidor solo permite eliminar lo anulado).
+21. **Cambio de tema sin transiciones:** casi todos los botones tienen `transition-colors` y los fondos no, así que al cambiar de tema los botones parecían "tardar". `ThemeToggle.jsx` agrega la clase `sin-transiciones` a `<html>` durante el cambio y la quita dos cuadros después, así todo cambia junto.
+22. **"Seleccionar todos" respeta el filtro:** el botón Todos / Ninguno actúa solo sobre lo que se ve (cliente filtrados, movimientos filtrados por tipo y vista). Evita archivar, anular o eliminar elementos que el usuario no está viendo. Va dentro del grupo de botones de acción, a la izquierda del botón principal (Anular, Archivar o Restaurar), con `ml-auto` para quedar pegado a la derecha.
 
 ## 6. Estado actual y pendientes conocidos
 
@@ -291,11 +301,17 @@ Reglas para toda pantalla nueva o modificada. Existen para que nada vuelva a ver
 **Avisos y confirmaciones**
 - Nunca `window.alert` ni `window.confirm`. Usar `useToast()` y `useConfirmar()`.
 - Resultado de una acción: `toast.ok` (verde, 3 s), `toast.error` (rojo, 6 s, con ×), `toast.info` (gris, 4,5 s). Máximo 3 a la vez; los iguales no se apilan.
-- Acciones reversibles (anular, archivar): `toast.deshacer(texto, funcionQueRevierte)`, 6 s.
+- Acciones reversibles (anular, archivar, registrar una compra): `toast.deshacer(texto, funcionQueRevierte)`, 6 s.
 - Validación de un formulario ("Ingresá un monto mayor a 0"): `AvisoForm` dentro del propio formulario, no un toast.
 - Fallo de carga de una pantalla entera: caja roja fija arriba (no desaparece sola).
 - Confirmación (`useConfirmar`): para lo irreversible (botón rojo, `peligro: true`, el foco inicia en "Cancelar") y para lo que cambia el resumen (archivar). Los textos dicen qué pasa y si se puede deshacer.
 - Los avisos se muestran siempre abajo y centrados; no se reubican por pantalla.
+
+**Temas**
+- El cambio claro/oscuro desactiva las transiciones un instante (clase `sin-transiciones`) para que nada se anime por separado. Nuevos selectores con `transition` no requieren cambios: la clase los cubre a todos.
+
+**Selección múltiple**
+- Toda pantalla con selección múltiple lleva un botón **Todos / Ninguno** que actúa solo sobre lo visible. Va en la barra fija de selección, junto a los botones de acción (a su izquierda, pegado a la derecha de la barra). La barra usa `flex-wrap` para no cortarse a 360 px.
 
 **Acciones por frecuencia**
 - Las acciones de uso diario quedan visibles; las ocasionales van en el menú "⋯ Más". Evitar más de 2 o 3 botones secundarios en una misma fila.

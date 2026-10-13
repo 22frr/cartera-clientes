@@ -1,3 +1,5 @@
+import { avisarCambio } from './sync';
+
 function getToken() {
   return localStorage.getItem('token');
 }
@@ -30,6 +32,11 @@ async function pedir(url, opciones = {}) {
   let datos = {};
   try { datos = await res.json(); } catch { /* respuesta sin cuerpo */ }
   if (!res.ok) throw new Error(datos.error || 'Error en el servidor');
+
+  // Toda modificación (POST, PUT, PATCH, DELETE) avisa a las otras pestañas
+  const metodo = (opciones.method || 'GET').toUpperCase();
+  if (metodo !== 'GET' && !url.startsWith('/api/productos')) avisarCambio();
+
   return datos;
 }
 
@@ -80,6 +87,19 @@ export const crearCliente = (cliente) =>
     body: JSON.stringify(cliente),
   });
 
+export const editarCliente = (id, datos) =>
+  pedir(`/api/clientes/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  });
+
+export const eliminarCliente = (id) =>
+  pedir(`/api/clientes/${id}`, { method: 'DELETE' });
+
+export const archivarCliente = (id) => pedir(`/api/clientes/${id}/archivar`, { method: 'PATCH' });
+export const restaurarCliente = (id) => pedir(`/api/clientes/${id}/restaurar`, { method: 'PATCH' });
+
 // Movimientos
 export const getMovimientos = (id) => pedir(`/api/clientes/${id}/movimientos`);
 
@@ -90,7 +110,16 @@ export const crearVenta = (venta) =>
     body: JSON.stringify(venta),
   });
 
+export const editarVenta = (id, datos) =>
+  pedir(`/api/ventas/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  });
+
 export const anularVenta = (id) => pedir(`/api/ventas/${id}/anular`, { method: 'PATCH' });
+export const eliminarVenta = (id) => pedir(`/api/ventas/${id}`, { method: 'DELETE' });
+export const restaurarVenta = (id) => pedir(`/api/ventas/${id}/restaurar`, { method: 'PATCH' });
 
 export const crearPago = (pago) =>
   pedir('/api/pagos', {
@@ -100,44 +129,10 @@ export const crearPago = (pago) =>
   });
 
 export const anularPago = (id) => pedir(`/api/pagos/${id}/anular`, { method: 'PATCH' });
-
-// Formato
-export const dinero = (valor) =>
-  Number(valor).toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    maximumFractionDigits: 0,
-  });
-
-export const fecha = (valor) => {
-  const [a, m, d] = String(valor).slice(0, 10).split('-');
-  return `${d}/${m}/${a}`;
-};
-
-export const editarVenta = (id, datos) =>
-  pedir(`/api/ventas/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(datos),
-  });
-  
-  export const editarCliente = (id, datos) =>
-  pedir(`/api/clientes/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(datos),
-  });
-
-export const eliminarCliente = (id) =>
-  pedir(`/api/clientes/${id}`, { method: 'DELETE' });
-
-export const eliminarVenta = (id) => pedir(`/api/ventas/${id}`, { method: 'DELETE' });
 export const eliminarPago = (id) => pedir(`/api/pagos/${id}`, { method: 'DELETE' });
-export const archivarCliente = (id) => pedir(`/api/clientes/${id}/archivar`, { method: 'PATCH' });
-export const restaurarCliente = (id) => pedir(`/api/clientes/${id}/restaurar`, { method: 'PATCH' });
-export const restaurarVenta = (id) => pedir(`/api/ventas/${id}/restaurar`, { method: 'PATCH' });
 export const restaurarPago = (id) => pedir(`/api/pagos/${id}/restaurar`, { method: 'PATCH' });
 
+// Productos (catálogo)
 export const getProductos = (soloActivos = false) =>
   pedir(`/api/productos${soloActivos ? '?activos=1' : ''}`);
 
@@ -190,3 +185,16 @@ export const registrarAviso = (clienteId, tipo) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cliente_id: clienteId, tipo }),
   });
+
+// Formato
+export const dinero = (valor) =>
+  Number(valor).toLocaleString('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    maximumFractionDigits: 0,
+  });
+
+export const fecha = (valor) => {
+  const [a, m, d] = String(valor).slice(0, 10).split('-');
+  return `${d}/${m}/${a}`;
+};

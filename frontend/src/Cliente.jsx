@@ -14,7 +14,7 @@ import { flechasEnFormulario } from './teclado';
 import ThemeToggle from './ThemeToggle';
 import { exportarCliente } from './excel';
 import { hace, diasUltimoAviso, armarLinkWhatsApp, abrirWhatsApp } from './cobranza';
-
+import { alCambiarDatos } from './sync';
 const filaVacia = { producto: '', cantidad: '1', precio_unitario: '', total: '' };
 
 // Fecha de hoy como AAAA-MM-DD en hora LOCAL (toISOString usaría UTC y de noche daría "mañana")
@@ -445,7 +445,7 @@ export default function Cliente() {
   }
 
   useEffect(() => { cargar(); }, [id]);
-
+  useEffect(() => alCambiarDatos(cargar), [id]);
 // Mientras haya una compra abierta (nueva o en edición), el catálogo puede sumarle productos
   useEffect(() => {
     if (editando !== null && editModo === 'productos') registrarDestino((p) => setFilasEdit((prev) => sumarProducto(prev, p)));
@@ -577,7 +577,16 @@ export default function Cliente() {
     setFilas((prev) => (prev.length === 1 ? [{ ...filaVacia }] : prev.filter((_, idx) => idx !== i)));
   }
 
+  
+  
   const totalCompra = filas.reduce((acc, f) => acc + (Number(f.total) || 0), 0);
+
+    // Deshacer una compra recién cargada: se anula y se borra, así no queda en "anulados"
+  async function deshacerCompra(ventaId) {
+    await anularVenta(ventaId);
+    await eliminarVenta(ventaId);
+    cargar();
+  }
 
   async function confirmarCompra() {
     const items = filas.filter(filaCompleta).map((f) => ({
@@ -590,8 +599,8 @@ export default function Cliente() {
       return;
     }
     try {
-      await crearVenta({ cliente_id: Number(id), items, fecha: fechaCompra || undefined });
-      toast.ok(`Compra de ${dinero(totalCompra)} registrada`);
+      const venta = await crearVenta({ cliente_id: Number(id), items, fecha: fechaCompra || undefined });
+      toast.deshacer(`Compra de ${dinero(totalCompra)} registrada`, () => deshacerCompra(venta.id));
       setModo(null);
       setFilas([{ ...filaVacia }]);
       setFechaCompra(hoy());
@@ -608,12 +617,12 @@ export default function Cliente() {
       return;
     }
     try {
-      await crearVenta({
+        const venta = await crearVenta({
         cliente_id: Number(id),
         items: itemsRapida(montoRapido, descRapida),
         fecha: fechaCompra || undefined,
       });
-      toast.ok(`Compra de ${dinero(montoRapido)} registrada`);
+      toast.deshacer(`Compra de ${dinero(montoRapido)} registrada`, () => deshacerCompra(venta.id));
       setModo(null);
       setMontoRapido('');
       setDescRapida('');
@@ -894,6 +903,15 @@ async function eliminarMovsSeleccionados() {
       if (orden === 'mayor') return Number(b.monto) - Number(a.monto);
       return Number(a.monto) - Number(b.monto); // 'menor'
     });
+
+    const todosMovsSeleccionados =
+    movsVisibles.length > 0 && movsVisibles.every((m) => movsSeleccionados.has(claveMov(m)));
+
+    function alternarTodosMovs() {
+      setMovsSeleccionados(
+        todosMovsSeleccionados ? new Set() : new Set(movsVisibles.map(claveMov))
+      );
+    }
 
   return (
     <div className="min-h-screen fondo-app">
@@ -1252,11 +1270,18 @@ async function eliminarMovsSeleccionados() {
           </div>
 
           {seleccionandoMovs && (
-            <div className="flex items-center justify-between gap-2 bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-xl sticky top-2 z-10 shadow-lg">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-xl sticky top-2 z-10 shadow-lg">
               <span className="text-sm font-medium">
-                {movsSeleccionados.size === 0 ? 'Tocá un movimiento para seleccionarlo' : `${movsSeleccionados.size} seleccionado${movsSeleccionados.size !== 1 ? 's' : ''}`}
+                {movsSeleccionados.size === 0 ? 'Elegí movimientos' : `${movsSeleccionados.size} seleccionado${movsSeleccionados.size !== 1 ? 's' : ''}`}
               </span>
-              <div className="flex gap-2">
+              <div className="flex gap-2 ml-auto">
+                <button
+                  onClick={alternarTodosMovs}
+                  disabled={movsVisibles.length === 0}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-white/40 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {todosMovsSeleccionados ? 'Ninguno' : 'Todos'}
+                </button>
                 {vista === 'anulados' ? (
                   <>
                     <button

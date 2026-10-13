@@ -12,6 +12,8 @@ import AvisarDeudores from './AvisarDeudores';
 import ImportarExcel from './ImportarExcel';
 import { exportarClientes } from './excel';
 import MenuMas from './MenuMas';
+import { alCambiarDatos } from './sync';
+
 
 // Minúsculas y sin tildes, para que "jose" encuentre "José"
 function normalizar(s) {
@@ -91,7 +93,8 @@ export default function App() {
   }
 
   useEffect(() => { cargar(); }, [verArchivados]);
-
+    // Si otra pestaña cambió algo (pago, compra, anulación...), se recarga la lista
+  useEffect(() => alCambiarDatos(cargar), [verArchivados]);
   // Otras pantallas avisan cuando algo cambia (ej. "Deshacer" de un archivado hecho en la ficha)
   useEffect(() => {
     const alCambiar = () => cargar();
@@ -237,6 +240,11 @@ export default function App() {
   const cantAtrasados = clientes.filter(esAtrasado).length;
   // A quiénes se les puede avisar: los que deben y se ven con el filtro actual
   const conDeuda = visibles.filter((c) => Number(c.saldo) > 0);
+  const todosSeleccionados = visibles.length > 0 && visibles.every((c) => seleccionados.has(c.id));
+
+  function alternarTodos() {
+    setSeleccionados(todosSeleccionados ? new Set() : new Set(visibles.map((c) => c.id)));
+  }
 
   async function exportar() {
     try {
@@ -457,12 +465,19 @@ export default function App() {
           </form>
         )}
 
-        {!mostrarForm && seleccionando && (
-          <div className="flex items-center justify-between gap-2 bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-xl sticky top-2 z-10 shadow-lg">
+       {!mostrarForm && seleccionando && (
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-xl sticky top-2 z-10 shadow-lg">
             <span className="text-sm font-medium">
-              {seleccionados.size === 0 ? 'Selecciona uno o más clientes' : `${seleccionados.size} seleccionado${seleccionados.size !== 1 ? 's' : ''}`}
+              {seleccionados.size === 0 ? 'Elegí clientes' : `${seleccionados.size} seleccionado${seleccionados.size !== 1 ? 's' : ''}`}
             </span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 ml-auto">
+              <button
+                onClick={alternarTodos}
+                disabled={visibles.length === 0}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border-2 border-white/40 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {todosSeleccionados ? 'Ninguno' : 'Todos'}
+              </button>
               {verArchivados ? (
                 <>
                   <button
