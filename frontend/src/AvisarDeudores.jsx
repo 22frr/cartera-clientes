@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { registrarAviso, dinero, nombreNegocio } from './api';
 import { armarLinkWhatsApp, abrirWhatsApp, mensajeRecordatorio } from './cobranza';
 import LineaCobranza from './LineaCobranza';
+import Cabecera from './Cabecera';
 import { useConfirmar } from './ConfirmContext';
 
 const tarjetaCls = 'tarjeta';
@@ -95,15 +96,12 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
 
   return (
     <div className="min-h-screen fondo-app">
-      <header className="cabecera p-4">
-        <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <button onClick={salir} className="text-2xl leading-none shrink-0">←</button>
-          <div className="min-w-0">
-            <h1 className="font-display font-extrabold text-2xl tracking-tight">Avisar a deudores</h1>
-            <p className="text-xs text-marca-100 truncate">{nombreNegocio()}</p>
-          </div>
-        </div>
-      </header>
+      <Cabecera
+        variante="avisar"
+        onVolver={salir}
+        titulo="Avisar a deudores"
+        subtitulo={nombreNegocio()}
+      />
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">
         {/* ---------- 1) Elegir a quiénes ---------- */}
@@ -135,14 +133,14 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
                     <label
                       className={`${tarjetaCls} flex items-center gap-3 p-4 min-h-[84px] transition-colors ${
                         puede ? 'cursor-pointer' : 'opacity-50'
-                      } ${marcado ? 'border-marca-500 ring-2 ring-marca-200 dark:ring-marca-900' : ''}`}
+                      } ${marcado ? 'border-amber-500 ring-2 ring-amber-300 bg-amber-100 dark:bg-amber-900/40 dark:ring-amber-600' : ''}`}
                     >
                       <input
                         type="checkbox"
                         checked={marcado}
                         disabled={!puede}
                         onChange={() => alternar(c.id)}
-                        className="w-5 h-5 accent-marca-600 shrink-0"
+                        className="w-5 h-5 accent-amber-500 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="font-display font-bold text-lg text-slate-900 dark:text-white truncate">{c.nombre}</p>

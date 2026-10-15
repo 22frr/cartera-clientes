@@ -11,7 +11,7 @@ import { useCatalogo } from './CatalogoContext';
 import { useToast, AvisoForm } from './ToastContext';
 import { useConfirmar } from './ConfirmContext';
 import { flechasEnFormulario } from './teclado';
-import ThemeToggle from './ThemeToggle';
+import Cabecera, { AccionesCabecera } from './Cabecera';
 import { exportarCliente } from './excel';
 import { hace, diasUltimoAviso, armarLinkWhatsApp, abrirWhatsApp } from './cobranza';
 import { alCambiarDatos } from './sync';
@@ -385,6 +385,50 @@ function TablaProductos({ filas, catalogo = [], onEditar, onQuitar, onEnter, onA
   );
 }
 
+// Cómo se distingue una compra de un pago en el historial: franja de color a la izquierda,
+// fondo apenas teñido, ícono y etiqueta. El color solo no alcanza (daltonismo, sol en el celular).
+const ESTILO_MOV = {
+  venta: {
+    franja: 'border-l-red-500',
+    franjaAnulada: 'border-l-red-400',
+    caja: 'border-l-red-500 bg-red-100 dark:bg-red-900/50',
+    cajaAnulada: 'border-l-red-400 bg-red-50 dark:bg-red-950/60',
+    chip: 'bg-red-500 text-white',
+    texto: 'text-red-800 dark:text-red-200',
+    etiqueta: 'Compra',
+    // flecha hacia arriba: la deuda sube
+    icono: 'M7 17L17 7M9 7h8v8',
+  },
+  pago: {
+    franja: 'border-l-marca-600',
+    franjaAnulada: 'border-l-marca-500',
+    caja: 'border-l-marca-600 bg-marca-100 dark:bg-marca-900/50',
+    cajaAnulada: 'border-l-marca-500 bg-marca-50 dark:bg-marca-900/30',
+    chip: 'bg-marca-600 text-white',
+    texto: 'text-marca-800 dark:text-marca-200',
+    etiqueta: 'Pago',
+    // flecha hacia abajo: la deuda baja
+    icono: 'M17 7L7 17M15 17H7V9',
+  },
+};
+
+function InsigniaTipo({ tipo, anulado }) {
+  const e = ESTILO_MOV[tipo];
+  return (
+    <div className="flex items-center gap-1.5 mb-1">
+      <span className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${e.chip}`}>
+        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d={e.icono} />
+        </svg>
+      </span>
+      <span className={`text-xs font-bold ${e.texto}`}>{e.etiqueta}</span>
+      {anulado && (
+        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-600 dark:bg-slate-500 text-white">Anulado</span>
+      )}
+    </div>
+  );
+}
+
 export default function Cliente() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -430,7 +474,7 @@ export default function Cliente() {
   const [movsSeleccionados, setMovsSeleccionados] = useState(new Set());
   const [procesandoMovs, setProcesandoMovs] = useState(false);
 
-  const { productosActivos: catalogo, alternarCatalogo, registrarDestino } = useCatalogo();
+  const { productosActivos: catalogo, registrarDestino } = useCatalogo();
 
 
   async function cargar() {
@@ -915,23 +959,13 @@ async function eliminarMovsSeleccionados() {
 
   return (
     <div className="min-h-screen fondo-app">
-      <header className="cabecera py-4">
-          <div className="max-w-3xl mx-auto px-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <button onClick={() => navigate(-1)} className="text-2xl leading-none shrink-0">←</button>
-              <h1 className="font-display font-extrabold text-2xl tracking-tight break-words leading-tight">{cliente ? cliente.nombre : 'Cliente'}</h1>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <ThemeToggle />
-              <button
-                onClick={alternarCatalogo}
-                className="text-sm bg-black/15 hover:bg-black/25 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                📦 Catálogo
-              </button>
-            </div>
-          </div>
-        </header>
+      <Cabecera
+        variante={cliente?.archivado ? 'archivados' : 'principal'}
+        onVolver={() => navigate(-1)}
+        etiqueta="Cliente"
+        titulo={cliente ? cliente.nombre : '…'}
+        acciones={<AccionesCabecera />}
+      />
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">
         {error && (
@@ -1052,6 +1086,7 @@ async function eliminarMovsSeleccionados() {
             </div>
 
             {/* Botones compra / pago */}
+            <h2 className="titulo-seccion text-xl self-start -mb-2">Registrar movimiento</h2>
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => abrir('compra')}
@@ -1216,7 +1251,7 @@ async function eliminarMovsSeleccionados() {
 
             {/* Encabezado del historial */}
             <div className="flex items-center justify-between gap-2">
-              <h2 className="font-display font-semibold text-slate-700 dark:text-slate-200">
+              <h2 className="titulo-seccion text-xl">
                 {vista === 'activos' ? 'Historial' : 'Movimientos anulados'}
               </h2>
               {(cantAnulados > 0 || vista === 'anulados') && (
@@ -1260,7 +1295,7 @@ async function eliminarMovsSeleccionados() {
                 onClick={() => (seleccionandoMovs ? cancelarSeleccionMovs() : setSeleccionandoMovs(true))}
                 className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
                   seleccionandoMovs
-                    ? 'bg-marca-600 border-marca-600 text-white'
+                    ? 'bg-amber-400 border-amber-500 text-slate-900'
                     : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
                 }`}
               >
@@ -1322,11 +1357,15 @@ async function eliminarMovsSeleccionados() {
                 return (<li
                   key={claveMov(m)}
                   onClick={() => seleccionandoMovs && editando !== m.id && toggleSeleccionMov(m)}
-                  className={`tarjeta-chica p-3 ${
+                  className={`tarjeta-chica p-3 border-l-8 ${
+                    seleccionandoMovs && movsSeleccionados.has(claveMov(m))
+                      ? (m.anulado ? ESTILO_MOV[m.tipo].franjaAnulada : ESTILO_MOV[m.tipo].franja) + ' '
+                      : (m.anulado ? ESTILO_MOV[m.tipo].cajaAnulada : ESTILO_MOV[m.tipo].caja) + ' '
+                  }${
                     seleccionandoMovs ? 'cursor-pointer' : ''
                   } ${
                     seleccionandoMovs && movsSeleccionados.has(claveMov(m))
-                      ? 'border-marca-500 ring-2 ring-marca-200 dark:ring-marca-900'
+                      ? 'border-y-amber-500 border-r-amber-500 ring-2 ring-amber-300 bg-amber-100 dark:bg-amber-900/40 dark:ring-amber-600'
                       : ''
                   }`}
                 >
@@ -1405,10 +1444,11 @@ async function eliminarMovsSeleccionados() {
                           checked={movsSeleccionados.has(claveMov(m))}
                           onChange={() => toggleSeleccionMov(m)}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-5 h-5 accent-marca-600 shrink-0 mt-0.5"
+                          className="w-5 h-5 accent-amber-500 shrink-0 mt-0.5"
                         />
                       )}
-                      <div className={`flex-1 ${m.anulado ? 'opacity-50' : ''}`}>
+                      <div className={`flex-1 min-w-0 ${m.anulado ? 'opacity-80' : ''}`}>
+                        <InsigniaTipo tipo={m.tipo} anulado={m.anulado} />
                         {esRapida(m) ? (
                           <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>
                             {m.items[0].producto}
@@ -1416,8 +1456,7 @@ async function eliminarMovsSeleccionados() {
                         ) : m.tipo === 'venta' ? (
                           <>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>Compra</p>
-                              <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full font-medium">
+                              <span className="text-xs bg-white/70 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full font-medium">
                                 {cantidadItems} producto{cantidadItems !== 1 ? 's' : ''}
                               </span>
                             </div>
@@ -1437,17 +1476,14 @@ async function eliminarMovsSeleccionados() {
                           </>
                         ) : (
                           <>
-                            <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>Pago recibido</p>
-                            {m.observacion && (
-                              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{m.observacion}</p>
-                            )}
+                            <p className={`font-medium text-slate-800 dark:text-slate-100 ${m.anulado ? 'line-through' : ''}`}>{m.observacion || 'Pago recibido'}</p>
                           </>
                         )}
                         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{fecha(m.fecha)}</p>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <p className={`numero font-bold ${m.anulado ? 'line-through opacity-50' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
+                        <p className={`numero font-bold ${m.anulado ? 'line-through opacity-70' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
                           {m.tipo === 'venta' ? '+' : '−'}{dinero(m.monto)}
                         </p>
 

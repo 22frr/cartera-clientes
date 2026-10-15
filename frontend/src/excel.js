@@ -1,4 +1,5 @@
 import { esAtrasado } from './cobranza';
+import { NOMBRE_APP } from './marca';
 
 // Lectura de Excel, plantillas y exportaciones para importar productos y clientes.
 // exceljs pesa bastante, así que se carga recién cuando el usuario toca "Importar" (import dinámico).
@@ -410,7 +411,7 @@ function configurarImpresion(hoja, { horizontal, filaEncabezado }) {
     printTitlesRow: `${filaEncabezado}:${filaEncabezado}`,
     margins: MARGENES,
   };
-  hoja.headerFooter = { oddFooter: '&LGenerado con FIADO$&RPágina &P de &N' };
+  hoja.headerFooter = { oddFooter: `&LGenerado con ${NOMBRE_APP}&RPágina &P de &N` };
 }
 
 // Lista de clientes tal como se está viendo (con los filtros y el orden elegidos)

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { getClientes, getResumen, crearCliente, archivarCliente, restaurarCliente, eliminarCliente, dinero, logout, nombreNegocio } from './api';
-import { useCatalogo } from './CatalogoContext';
+import { getClientes, getResumen, crearCliente, archivarCliente, restaurarCliente, eliminarCliente, dinero, nombreNegocio } from './api';
+import Cabecera, { AccionesCabecera } from './Cabecera';
+import { NOMBRE_APP } from './marca';
 import { useToast, AvisoForm } from './ToastContext';
 import { useConfirmar } from './ConfirmContext';
-import ThemeToggle from './ThemeToggle';
 import { flechasEnFormulario } from './teclado';
 import { DIAS_ATRASADO, esAtrasado, NIVELES, nivelDeuda } from './cobranza';
 import LineaCobranza from './LineaCobranza';
@@ -62,7 +62,6 @@ const ORDENES = [
 export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const verArchivados = searchParams.get('archivados') === '1';
-  const { alternarCatalogo } = useCatalogo();
   const toast = useToast();
   const confirmar = useConfirmar();
 
@@ -272,38 +271,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen fondo-app">
-      <header className="cabecera py-4">
-        <div className="max-w-3xl mx-auto px-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            {verArchivados && (
-              <button onClick={salirDeArchivados} className="text-2xl leading-none">←</button>
-            )}
-            <div>
-              <h1 className="font-display font-extrabold text-2xl tracking-tight">
-                {verArchivados ? 'Clientes archivados' : 'FIADO$'}
-              </h1>
-              <p className="text-xs text-marca-100">
-                {verArchivados ? 'Podés restaurarlos o eliminarlos' : nombreNegocio()}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <button
-              onClick={alternarCatalogo}
-              className="text-sm bg-black/15 hover:bg-black/25 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              📦 Catálogo
-            </button>
-            <button
-              onClick={() => { logout(); window.location.href = '/login'; }}
-              className="text-sm bg-black/15 hover:bg-black/25 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              Salir
-            </button>
-          </div>
-        </div>
-      </header>
+      <Cabecera
+        variante={verArchivados ? 'archivados' : 'principal'}
+        onVolver={verArchivados ? salirDeArchivados : undefined}
+        titulo={verArchivados ? 'Clientes archivados' : NOMBRE_APP}
+        subtitulo={verArchivados ? 'Podés restaurarlos o eliminarlos' : nombreNegocio()}
+        acciones={<AccionesCabecera menu />}
+      />
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">
         {importando && (
@@ -410,7 +384,7 @@ export default function App() {
                 onClick={() => (seleccionando ? cancelarSeleccion() : setSeleccionando(true))}
                 className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
                   seleccionando
-                    ? 'bg-marca-600 border-marca-600 text-white'
+                    ? 'bg-amber-400 border-amber-500 text-slate-900'
                     : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
                 }`}
               >
@@ -517,7 +491,7 @@ export default function App() {
                     onClick={() => toggleSeleccion(c.id)}
                     className={`w-full text-left tarjeta px-4 py-3 flex justify-between items-center gap-3 min-h-[92px] sm:min-h-[76px] transition-colors ${
                       seleccionados.has(c.id)
-                        ? 'border-marca-500 ring-2 ring-marca-200 dark:ring-marca-900'
+                        ? 'border-amber-500 ring-2 ring-amber-300 bg-amber-100 dark:bg-amber-900/40 dark:ring-amber-600'
                         : ''
                     }`}
                   >
@@ -527,7 +501,7 @@ export default function App() {
                         checked={seleccionados.has(c.id)}
                         onChange={() => toggleSeleccion(c.id)}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-5 h-5 accent-marca-600 shrink-0"
+                        className="w-5 h-5 accent-amber-500 shrink-0"
                       />
                       <div className="min-w-0">
                         <p className="font-display font-bold text-lg text-slate-900 dark:text-white break-words leading-tight">{c.nombre}</p>

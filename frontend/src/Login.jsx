@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from './api';
 import ThemeToggle from './ThemeToggle';
+import Logo from './Logo';
+import { NOMBRE_APP } from './marca';
 import { useToast } from './ToastContext';
 
 export default function Login() {
@@ -49,8 +51,8 @@ export default function Login() {
         className="tarjeta p-6 rounded-2xl w-full max-w-sm space-y-4"
       >
         <div className="text-center space-y-1">
-          <div className="w-12 h-12 mx-auto rounded-xl border-2 border-slate-900 shadow-[3px_3px_0_0_#0f172a] bg-marca-600 flex items-center justify-center text-2xl">🧾</div>
-          <h1 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white">Cartera de clientes</h1>
+          <div className="flex justify-center"><Logo grande fondo="marca" /></div>
+          <h1 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white">{NOMBRE_APP}</h1>
           <p className="text-sm text-slate-600 dark:text-slate-300">Ingresá para administrar tu negocio</p>
         </div>
 
