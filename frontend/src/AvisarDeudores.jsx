@@ -7,10 +7,7 @@ import { useConfirmar } from './ConfirmContext';
 
 const tarjetaCls = 'tarjeta';
 
-// Pantalla para mandarle el recordatorio a varios clientes seguidos.
-// Flujo: elegir a quiénes -> uno por vez: abrir WhatsApp, enviar, confirmar -> resumen.
-// WhatsApp no deja enviar solo desde una página web, así que el "enviar" lo hacés vos;
-// acá queda registrado a quién ya se le avisó.
+
 export default function AvisarDeudores({ clientes, onCerrar }) {
   const confirmar = useConfirmar();
   const puedeAvisar = (c) => !!armarLinkWhatsApp(c);
@@ -23,7 +20,7 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
   const [resultados, setResultados] = useState({}); // id -> 'enviado' | 'saltado'
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
-
+  const [textos, setTextos] = useState({}); // id -> mensaje editado a mano
   const elegibles = clientes.filter(puedeAvisar);
   const todosElegidos = elegibles.length > 0 && elegibles.every((c) => elegidos.has(c.id));
 
@@ -51,7 +48,9 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
   }
 
   const actual = fase === 'enviando' ? cola[indice] : null;
-
+  const original = actual ? mensajeRecordatorio(actual) : '';
+  const textoActual = actual ? (textos[actual.id] ?? original) : '';
+  
   function pasarAlSiguiente() {
     setAbierto(false);
     setError('');
@@ -197,8 +196,25 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
                 </p>
               </div>
 
-              <div className="text-sm rounded-lg bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-600 p-3 text-slate-600 dark:text-slate-300">
-                {mensajeRecordatorio(actual)}
+                            <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  Mensaje (podés modificarlo)
+                  <textarea
+                    rows={4}
+                    value={textoActual}
+                    onChange={(e) => setTextos((t) => ({ ...t, [actual.id]: e.target.value }))}
+                    className="mt-1 w-full text-sm font-normal border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
+                  />
+                </label>
+                {textoActual !== original && (
+                  <button
+                    type="button"
+                    onClick={() => setTextos((t) => { const n = { ...t }; delete n[actual.id]; return n; })}
+                    className="text-xs underline text-slate-600 dark:text-slate-300"
+                  >
+                    Volver al mensaje original
+                  </button>
+                )}
               </div>
 
               {error && (
@@ -208,7 +224,7 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
               {!abierto ? (
                 <div className="space-y-2">
                   <a
-                    href={armarLinkWhatsApp(actual)}
+                    href={armarLinkWhatsApp(actual, textoActual)}
                     onClick={(e) => { e.preventDefault(); abrirWhatsApp(armarLinkWhatsApp(actual)); setAbierto(true); }}
                     className="block w-full text-center bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-medium transition-colors"
                   >

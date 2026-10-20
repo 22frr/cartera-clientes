@@ -1,7 +1,7 @@
 -- ============================================================
 -- Schema consolidado - Cartera de clientes (PERN)
 -- Base de datos: kiosco_db (PostgreSQL)
--- Refleja el estado actual del proyecto al 09/10/2026.
+-- Refleja el estado actual del proyecto al 20/10/2026.
 -- Ejecutar sobre una base vacia. Es el resultado final de todas
 -- las migraciones aplicadas durante el desarrollo (no es un
 -- historial de ALTER TABLE, es la foto final).
@@ -17,6 +17,9 @@ CREATE TABLE negocios (
   telefono VARCHAR(30),
   rubro VARCHAR(80),
   direccion VARCHAR(150),
+  codigo_area VARCHAR(5),             -- para completar teléfonos y armar links de WhatsApp (ej. 342, 11)
+  datos_pago VARCHAR(200),            -- alias/CBU, se usa en la palabra {pago} del recordatorio
+  mensaje_recordatorio VARCHAR(600),  -- plantilla del recordatorio; NULL = mensaje por defecto
   activo BOOLEAN DEFAULT TRUE,
   creado_en TIMESTAMP DEFAULT NOW()
 );
@@ -138,6 +141,11 @@ CREATE TABLE avisos (
 CREATE INDEX idx_productos_negocio ON productos(negocio_id);
 
 CREATE INDEX idx_avisos_cliente ON avisos(cliente_id, tipo, creado_en);
+
+CREATE INDEX idx_ventas_cliente    ON ventas(cliente_id, fecha);
+CREATE INDEX idx_pagos_cliente     ON pagos(cliente_id, fecha);
+CREATE INDEX idx_venta_items_venta ON venta_items(venta_id);
+CREATE INDEX idx_clientes_negocio  ON clientes(negocio_id, archivado);
 
 CREATE UNIQUE INDEX idx_productos_codigo_barras
   ON productos(negocio_id, codigo_barras)

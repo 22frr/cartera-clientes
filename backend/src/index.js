@@ -9,7 +9,7 @@ import pagosRoutes from './routes/pagos.js';
 import { requiereAuth } from './auth.js';
 import productosRoutes from './routes/productos.js';
 import avisosRoutes from './routes/avisos.js';
-
+import negocioRoutes from './routes/negocio.js';
 
 dotenv.config();
 
@@ -24,7 +24,7 @@ app.use('/api/ventas', ventasRoutes);
 app.use('/api/pagos', pagosRoutes);
 app.use('/api/productos', productosRoutes);
 app.use('/api/avisos', avisosRoutes);
-
+app.use('/api/negocio', negocioRoutes);
 app.get('/api/resumen', requiereAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`

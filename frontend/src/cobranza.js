@@ -1,6 +1,6 @@
-import { dinero, nombreNegocio } from './api';
+import { dinero, nombreNegocio, configNegocio } from './api';
 
-// Un cliente es "atrasado" si debe y pasaron más de estos días desde su último pago
+
 export const DIAS_ATRASADO = 30;
 export const esAtrasado = (c) => Number(c.saldo) > 0 && c.dias_sin_pagar > DIAS_ATRASADO;
 
@@ -48,16 +48,17 @@ export function hace(d) {
   return `hace ${d} días`;
 }
 
-// Días desde el último aviso (recordatorio o cuenta), o null si nunca se le avisó
 export function diasUltimoAviso(c) {
   const avisos = [c.dias_ultimo_recordatorio, c.dias_ultima_cuenta].filter((d) => d != null);
   return avisos.length ? Math.min(...avisos) : null;
 }
 
-// Código de área que se agrega cuando el teléfono está guardado sin él (ej. "412-3456")
-export const CODIGO_AREA_POR_DEFECTO = '342';
 
-// Devuelve el número listo para wa.me (549 + área + número) o null si no se puede armar
+function codigoArea() {
+  return String(configNegocio().codigo_area ?? '').replace(/\D/g, '');
+}
+
+
 export function telefonoParaWhatsApp(tel) {
   let n = String(tel ?? '').replace(/\D/g, '');
   if (!n) return null;
@@ -68,9 +69,13 @@ export function telefonoParaWhatsApp(tel) {
   }
   if (n.startsWith('0')) n = n.slice(1);
 
-  // Sin código de área: "4123456" o "15 4123456"
-  if (n.length === 9 && n.startsWith('15')) n = n.slice(2);
-  if (n.length === 7) n = CODIGO_AREA_POR_DEFECTO + n;
+
+  const area = codigoArea();
+  if (area) {
+    const local = 10 - area.length;
+    if (n.length === local + 2 && n.startsWith('15')) n = n.slice(2);
+    if (n.length === local) n = area + n;
+  }
 
   // Con área y "15": 342 15 4123456 -> se saca el 15
   if (n.length === 12) {
@@ -85,27 +90,46 @@ export function telefonoParaWhatsApp(tel) {
   return n.length === 10 ? '549' + n : null;
 }
 
+
+
+// Mensaje por defecto. Las palabras entre llaves se reemplazan al enviar:
+//   {CLIENTE} nombre del cliente, {saldo} lo que debe,
+//   {negocio} nombre del negocio, {pago} alias/CBU (si no hay, esa línea no se envía)
+export const PLANTILLA_POR_DEFECTO =
+  'Hola {cliente}, te escribo de {negocio}. Tu saldo pendiente es de {saldo}.\n' +
+  'Podés abonar con: {pago} .\n' +
+  '¡Gracias!';
+
 // Texto del recordatorio que se le manda al cliente
 export function mensajeRecordatorio(cliente) {
-  const nombre = String(cliente.nombre || '').trim().split(/\s+/)[0];
+  const cfg = configNegocio();
   const negocio = nombreNegocio();
-  const saldo = Number(cliente.saldo);
-  return saldo > 0
-    ? `Hola ${nombre}, te escribo de ${negocio}. Tu saldo pendiente es de ${dinero(saldo)}. ¡Gracias!`
-    : `Hola ${nombre}, te escribo de ${negocio}. Tu cuenta está al día. ¡Gracias!`;
+  const primero = String(cliente.nombre || '').trim().split(/\s+/)[0];
+
+  if (!(Number(cliente.saldo) > 0)) {
+    return `Hola ${primero}, te escribo de ${negocio}. Tu cuenta está al día. ¡Gracias!`;
+  }
+
+  const pago = String(cfg.datos_pago || '').trim().replace(/[.\s]+$/, '');
+  const plantilla = cfg.mensaje || PLANTILLA_POR_DEFECTO;
+
+  return plantilla
+    .split('\n')
+    .filter((linea) => pago || !/\{pago\}/i.test(linea))
+    .join('\n')
+    .replace(/\{(cliente|nombre)\}/gi, () => primero)
+    .replace(/\{saldo\}/gi, () => dinero(cliente.saldo))
+    .replace(/\{negocio\}/gi, () => negocio)
+    .replace(/\{pago\}/gi, () => pago)
+    .trim();
 }
 
-// ¿Es un celular? (ahí wa.me abre la app de WhatsApp sin problemas)
 export function esCelular() {
   const ua = navigator.userAgent || '';
   return /Android|iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/i.test(ua));
 }
 
-// En la compu hay dos formas de abrir el chat:
-//  'web' -> WhatsApp Web, en el navegador (recarga la pestaña en cada chat)
-//  'app' -> la aplicación de WhatsApp instalada en la compu (abre cada chat en la misma
-//           ventana, sin pestañas nuevas ni recargas)
-// Se guarda en este navegador. Por defecto 'web', que funciona sin instalar nada.
+
 const CLAVE_MODO_WA = 'whatsapp_modo';
 
 export function getModoWhatsApp() {
@@ -120,23 +144,22 @@ export function setModoWhatsApp(modo) {
   try {
     localStorage.setItem(CLAVE_MODO_WA, modo === 'app' ? 'app' : 'web');
   } catch {
-    /* sin localStorage: no pasa nada */
+    
   }
 }
 
-// Link de WhatsApp con el mensaje armado, o null si el cliente no tiene un teléfono válido.
-export function armarLinkWhatsApp(cliente) {
+
+
+export function armarLinkWhatsApp(cliente, texto) {
   const num = telefonoParaWhatsApp(cliente.telefono);
   if (!num) return null;
-  const texto = encodeURIComponent(mensajeRecordatorio(cliente));
-  if (esCelular()) return `https://wa.me/${num}?text=${texto}`;
+  const msg = encodeURIComponent(texto ?? mensajeRecordatorio(cliente));
+  if (esCelular()) return `https://wa.me/${num}?text=${msg}`;
   return getModoWhatsApp() === 'app'
-    ? `whatsapp://send?phone=${num}&text=${texto}`
-    : `https://web.whatsapp.com/send?phone=${num}&text=${texto}`;
+    ? `whatsapp://send?phone=${num}&text=${msg}`
+    : `https://web.whatsapp.com/send?phone=${num}&text=${msg}`;
 }
 
-// Abre el chat. Con la app instalada se entrega el link al programa (la página queda como está);
-// con WhatsApp Web se reutiliza siempre la misma pestaña en vez de abrir una nueva cada vez.
 export function abrirWhatsApp(url) {
   if (url.startsWith('whatsapp:')) {
     window.location.href = url;

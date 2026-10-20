@@ -6,15 +6,20 @@ import { fechaRazonable, MENSAJE_FECHA } from '../fechas.js';
 const router = Router();
 router.use(requiereAuth);
 
-// Datos de cobranza que se agregan a cada cliente (todos en días, null si no aplica):
-//  - dias_sin_pagar: solo si hoy debe algo. Días desde su último pago activo;
-//    si nunca pagó, desde su primera compra activa.
-//  - dias_ultimo_recordatorio / dias_ultima_cuenta: días desde el último aviso de ese tipo.
 const COLUMNAS_COBRANZA = `
   CASE WHEN COALESCE(s.saldo, 0) > 0 THEN
-    CURRENT_DATE - COALESCE(
+    CURRENT_DATE - GREATEST(
       (SELECT MAX(p.fecha) FROM pagos p WHERE p.cliente_id = c.id AND NOT p.anulado),
-      (SELECT MIN(v.fecha) FROM ventas v WHERE v.cliente_id = c.id AND NOT v.anulado)
+      (SELECT MIN(t.fecha)
+         FROM (
+           SELECT v.fecha,
+                  SUM(v.total) OVER (ORDER BY v.fecha, v.id) AS acumulado
+           FROM ventas v
+           WHERE v.cliente_id = c.id AND NOT v.anulado
+         ) t
+        WHERE t.acumulado > COALESCE(
+          (SELECT SUM(p2.monto) FROM pagos p2 WHERE p2.cliente_id = c.id AND NOT p2.anulado), 0)
+      )
     )
   END AS dias_sin_pagar,
   CURRENT_DATE - (SELECT MAX(a.creado_en) FROM avisos a

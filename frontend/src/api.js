@@ -9,6 +9,12 @@ function avisoParaLogin(texto) {
   try { sessionStorage.setItem('aviso_login', texto); } catch { /* sin sessionStorage: no pasa nada */ }
 }
 
+function borrarSesion() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('negocio');
+  localStorage.removeItem('negocio_config');
+}
+
 async function pedir(url, opciones = {}) {
   const token = getToken();
   const headers = { ...(opciones.headers || {}) };
@@ -22,8 +28,7 @@ async function pedir(url, opciones = {}) {
   }
 
   if (res.status === 401) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('negocio');
+    borrarSesion();
     avisoParaLogin('Tu sesión expiró. Ingresá de nuevo.');
     window.location.href = '/login';
     throw new Error('Sesión expirada');
@@ -61,8 +66,7 @@ export async function login(usuario, password) {
 }
 
 export function logout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('negocio');
+  borrarSesion();
   avisoParaLogin('Cerraste sesión. ¡Hasta pronto!');
 }
 
@@ -73,6 +77,53 @@ export function estaLogueado() {
 export function nombreNegocio() {
   return localStorage.getItem('negocio') || '';
 }
+
+// Configuración del negocio (código de área, datos de pago).
+// Se guarda en este navegador para poder leerla al instante al armar mensajes de WhatsApp.
+function guardarConfigLocal(n) {
+  try {
+    if (n.nombre) localStorage.setItem('negocio', n.nombre);
+      localStorage.setItem('negocio_config', JSON.stringify({
+      codigo_area: n.codigo_area || '',
+      datos_pago: n.datos_pago || '',
+      mensaje: n.mensaje_recordatorio || '',
+    }));
+  } catch { /* sin localStorage: no pasa nada */ }
+}
+
+export function configNegocio() {
+  try {
+    return JSON.parse(localStorage.getItem('negocio_config')) || {};
+  } catch {
+    return {};
+  }
+}
+
+export const getNegocio = () => pedir('/api/negocio');
+
+// Se llama al entrar a la app. Si falla (sin conexión) se usa lo último guardado.
+export async function cargarConfigNegocio() {
+  try {
+    guardarConfigLocal(await getNegocio());
+  } catch { /* se usa la copia guardada */ }
+}
+
+export async function guardarNegocio(datos) {
+  const r = await pedir('/api/negocio', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  });
+  guardarConfigLocal(r);
+  return r;
+}
+
+export const cambiarClave = (actual, nueva) =>
+  pedir('/api/negocio/clave', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actual, nueva }),
+  });
 
 // Clientes
 export const getClientes = (archivados = false) =>

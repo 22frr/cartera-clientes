@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import './index.css';
@@ -6,18 +6,35 @@ import App from './App.jsx';
 import Cliente from './Cliente.jsx';
 import Login from './Login.jsx';
 import Catalogo from './Catalogo.jsx';
+import Configuracion from './Configuracion.jsx';
 import Layout from './Layout.jsx';
 import { CatalogoProvider } from './CatalogoContext.jsx';
-import { estaLogueado } from './api.js';
+import { estaLogueado, cargarConfigNegocio } from './api.js';
 import { ToastProvider } from './ToastContext.jsx';
 import { ConfirmProvider } from './ConfirmContext.jsx';
 
 // Todo lo que está adentro exige sesión y comparte el catálogo.
 // El Provider vive acá arriba, así que no se destruye al navegar entre pantallas.
+// Antes de mostrar nada se carga la configuración del negocio (código de área, datos de pago):
+// los links de WhatsApp se arman al dibujar la pantalla y la necesitan ya cargada.
 function Privada() {
-  return estaLogueado()
-    ? <CatalogoProvider><Outlet /></CatalogoProvider>
-    : <Navigate to="/login" replace />;
+  const logueado = estaLogueado();
+  const [listo, setListo] = useState(false);
+
+  useEffect(() => {
+    if (!logueado) return;
+    cargarConfigNegocio().finally(() => setListo(true));
+  }, [logueado]);
+
+  if (!logueado) return <Navigate to="/login" replace />;
+  if (!listo) {
+    return (
+      <div className="min-h-screen fondo-app flex items-center justify-center text-slate-700 dark:text-slate-300">
+        Cargando…
+      </div>
+    );
+  }
+  return <CatalogoProvider><Outlet /></CatalogoProvider>;
 }
 
 createRoot(document.getElementById('root')).render(
@@ -35,6 +52,7 @@ createRoot(document.getElementById('root')).render(
           </Route>
           {/* Catálogo como página (celu) o como ventana emergente (PC) */}
           <Route path="/catalogo" element={<Catalogo />} />
+          <Route path="/configuracion" element={<Configuracion />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,7 +1,7 @@
 # Sistema de cartera de clientes y cuenta corriente
 
 **Documento técnico y de producto**
-Última actualización: 13/10/2026
+Última actualización: 20/10/2026
 
 ---
 
@@ -33,10 +33,10 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 - Historial filtrable por tipo y ordenable por fecha o monto, con vista separada de anulados.
 
 **Cobranza**
-- "Días sin pagar": desde el último pago activo o, si nunca pagó, desde la primera compra activa. Solo se calcula si hoy debe algo.
+- "Días sin pagar": el **menor** entre los días desde el último pago activo y los días desde la deuda más antigua sin cubrir (los pagos se aplican primero a las compras más viejas, criterio FIFO). Solo se calcula si hoy debe algo. Así un buen cliente que pagó todo y hoy compró algo no figura como atrasado (ver 5.23).
 - Cuatro niveles de color según antigüedad de la deuda: al día, reciente, atención (más de 20 días), atrasado (más de 30 días). Los umbrales son constantes en `cobranza.js`.
 - Aviso en la lista cuando hay clientes atrasados, con acceso directo al filtro.
-- Recordatorio por WhatsApp con el mensaje armado (el envío lo hace la persona; el sistema abre el chat). Normaliza teléfonos argentinos (código de área por defecto configurable en `cobranza.js`).
+- Recordatorio por WhatsApp con el mensaje armado (el envío lo hace la persona; el sistema abre el chat). Normaliza teléfonos argentinos (el código de área es un dato de cada negocio, se configura en Configuración).
 - Pantalla **Avisar a deudores**: elegir a quiénes, y recorrerlos uno por uno (abrir WhatsApp → confirmar si se envió → siguiente). Queda registrado a quién se avisó.
 - "Marcar aviso enviado" desde la ficha, y "Último aviso" visible en la lista y en la ficha.
 
@@ -49,6 +49,12 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 - Importar **productos** y **clientes** desde un `.xlsx` (ver 5.9 y 5.10): plantilla descargable, vista previa antes de guardar, sin duplicados.
 - Importar clientes con **saldo inicial** y fecha aproximada de la deuda.
 - Exportar la **lista de clientes** (tal como se está viendo, con filtros y orden) y la **ficha de un cliente** (historial con saldo acumulado y detalle de productos), con formato listo para imprimir.
+
+**Configuración del negocio**
+- Pantalla propia (menú del círculo con la inicial del negocio → Configuración).
+- Nombre del negocio, **código de área** (para completar teléfonos cargados sin código), **alias o CBU** para cobrar y **mensaje del recordatorio editable** con las palabras `{cliente}`, `{saldo}`, `{negocio}` y `{pago}` (ver 5.26).
+- Cambio de contraseña (pide la actual).
+- En "Avisar a deudores" el mensaje de cada cliente se puede ajustar antes de abrir WhatsApp.
 
 **Experiencia de uso**
 - Avisos en pantalla (toasts) para todo resultado de una acción, con "Deshacer" en anular y archivar.
@@ -96,6 +102,8 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 | RF14 | Rechazar fechas inverosímiles (futuras o de más de 10 años de antigüedad) en compras, pagos e importaciones. |
 | RF15 | Mantener sincronizadas las pantallas abiertas (misma pestaña u otras) cuando cambian los datos, sin tener que refrescar. |
 | RF16 | Permitir seleccionar todos los elementos visibles en toda pantalla con selección múltiple. |
+| RF17 | Permitir a cada negocio configurar su código de área, sus datos de pago y el texto del recordatorio, y cambiar su contraseña. |
+| RF18 | No marcar como atrasado a un cliente que pagó su deuda anterior y solo tiene una compra reciente. |
 
 ### 3.2 Requerimientos no funcionales
 
@@ -131,7 +139,8 @@ kiosco-app/
 │       ├── Catalogo.jsx           Catálogo como pantalla / ventana emergente
 │       ├── CatalogoContenido.jsx  Contenido del catálogo (se reutiliza en las 3 vistas)
 │       ├── CatalogoContext.jsx    Estado del catálogo y sincronización entre ventanas
-│       ├── AvisarDeudores.jsx     Recordatorios por WhatsApp, uno por uno
+│       ├── AvisarDeudores.jsx     Recordatorios por WhatsApp, uno por uno (mensaje editable)
+│       ├── Configuracion.jsx      Datos del negocio, mensaje del recordatorio, contraseña
 │       ├── LineaCobranza.jsx      "Sin pagar hace X días · Último aviso: ..."
 │       ├── ImportarExcel.jsx      Ventana de importación (productos y clientes)
 │       ├── MenuMas.jsx            Menú desplegable "⋯ Más"
@@ -159,7 +168,8 @@ kiosco-app/
             ├── ventas.js          Compras (con múltiples productos)
             ├── pagos.js           Pagos
             ├── productos.js       Catálogo e importación
-            └── avisos.js          Registro de avisos de cobranza
+            ├── avisos.js          Registro de avisos de cobranza
+            └── negocio.js         Configuración del negocio y cambio de contraseña
 ```
 
 ### 4.3 Modelo de datos (resumen conceptual)
@@ -172,7 +182,7 @@ negocios ──< clientes ──< avisos
 negocios ──< productos
 ```
 
-Toda tabla de datos operativos (`clientes`, `ventas`, `pagos`, `avisos`, `productos`) tiene una columna `negocio_id`, y **toda consulta del backend filtra por el negocio del usuario autenticado**. Este es el mecanismo central de aislamiento multi-tenant. El detalle completo está en `schema.sql`.
+Toda tabla de datos operativos (`clientes`, `ventas`, `pagos`, `avisos`, `productos`) tiene una columna `negocio_id`, y **toda consulta del backend filtra por el negocio del usuario autenticado**. Este es el mecanismo central de aislamiento multi-tenant. El detalle completo está en `schema.sql`. `negocios` guarda además la configuración propia de cada comercio: `codigo_area`, `datos_pago` y `mensaje_recordatorio`.
 
 Las compras (`ventas`) y sus productos (`venta_items`) están separados para permitir múltiples productos por operación sin duplicar cabecera (fecha, cliente, total). La vista `saldos` calcula el saldo de cada cliente.
 
@@ -186,6 +196,7 @@ Las compras (`ventas`) y sus productos (`venta_items`) están separados para per
 | Pagos | `POST /pagos`, `PATCH /:id/anular`, `PATCH /:id/restaurar`, `DELETE /:id` (solo anulados) |
 | Productos | `GET /productos` (`?activos=1`), `GET /productos/codigo/:codigo`, `POST`, `PUT /:id`, `PATCH /:id/activo`, `DELETE /:id`, `POST /productos/importar` |
 | Avisos | `POST /avisos` (`recordatorio` o `cuenta`) |
+| Negocio | `GET /negocio`, `PUT /negocio` (nombre, código de área, datos de pago, mensaje), `PATCH /negocio/clave` |
 | Resumen | `GET /resumen` (deuda total, clientes con deuda, total; excluye archivados) |
 
 `GET /clientes` y `GET /clientes/:id` incluyen, además de los datos del cliente y su saldo, `dias_sin_pagar`, `dias_ultimo_recordatorio` y `dias_ultima_cuenta`.
@@ -225,9 +236,23 @@ Estas decisiones no son obvias leyendo solo el código, así que quedan document
 21. **Cambio de tema sin transiciones:** casi todos los botones tienen `transition-colors` y los fondos no, así que al cambiar de tema los botones parecían "tardar". `ThemeToggle.jsx` agrega la clase `sin-transiciones` a `<html>` durante el cambio y la quita dos cuadros después, así todo cambia junto.
 22. **"Seleccionar todos" respeta el filtro:** el botón Todos / Ninguno actúa solo sobre lo que se ve (cliente filtrados, movimientos filtrados por tipo y vista). Evita archivar, anular o eliminar elementos que el usuario no está viendo. Va dentro del grupo de botones de acción, a la izquierda del botón principal (Anular, Archivar o Restaurar), con `ml-auto` para quedar pegado a la derecha.
 
+23. **"Días sin pagar" con criterio FIFO:** contar solo desde el último pago daba un falso positivo grave: quien pagó todo en enero y hoy compra $500 aparecía con 270 días, en rojo y listo para "Avisar". Ahora se toma el **menor** entre los días desde el último pago y los días desde la deuda más antigua sin cubrir (los pagos se aplican a las compras más viejas primero, con una función de ventana en `clientes.js`). Un cliente que sigue pagando algo, o que recién compró, no figura como atrasado; uno que nunca pagó sigue contando desde su primera compra.
+24. **Configuración del negocio cacheada en `localStorage`:** los links de WhatsApp se arman de forma síncrona al dibujar la pantalla, y necesitan el código de área y el mensaje ya cargados. `Privada` (en `main.jsx`) llama a `cargarConfigNegocio()` antes de mostrar la app, y `api.js` guarda la copia en `negocio_config` (se borra al cerrar sesión). Si no hay conexión se usa la última copia. La alternativa, volver asíncronas todas las pantallas que arman links, no justificaba la complejidad.
+25. **Contraseña actual incorrecta responde 400, no 401:** el frontend interpreta cualquier 401 como "sesión vencida" y cierra la sesión. Un error de tipeo al cambiar la contraseña no debe sacar al usuario de la app.
+26. **Mensaje del recordatorio como plantilla simple:** texto libre con cuatro palabras entre llaves (`{cliente}`, `{saldo}`, `{negocio}`, `{pago}`, sin distinguir mayúsculas). Si el negocio no cargó alias, la línea que contiene `{pago}` no se envía. Si el campo se guarda vacío se usa `PLANTILLA_POR_DEFECTO` (en `cobranza.js`), así los cambios del mensaje base llegan a quien no lo personalizó. Se descartó un editor con botones y vista previa por ser más engorroso que útil. Los clientes al día reciben siempre un mensaje fijo ("tu cuenta está al día"). El punto final del mensaje base va separado del alias (`{pago} .`) para que al copiar el alias no se copie el punto.
+27. **Código de área vacío por defecto en negocios nuevos:** antes estaba fijo en `342` (la zona del primer cliente). Asumirlo en otro comercio abriría el WhatsApp de otra persona; es preferible que un teléfono sin código figure como "Sin teléfono válido". La normalización en `cobranza.js` funciona con áreas de 2, 3 o 4 dígitos (un número argentino son 10 dígitos entre área y local).
+28. **Índices sobre las claves foráneas:** PostgreSQL no las indexa solo. Se agregaron `ventas(cliente_id, fecha)`, `pagos(cliente_id, fecha)`, `venta_items(venta_id)` y `clientes(negocio_id, archivado)`, porque la lista de clientes hace varias subconsultas por fila.
+
 ## 6. Estado actual y pendientes conocidos
 
 ### 6.1 Pendiente de corto plazo
+- Estados vacíos y de carga (la lista dice "No hay clientes" mientras carga; un negocio nuevo no ve guía).
+- "Enviar cuenta" por WhatsApp (saldo y últimos movimientos; el tipo `cuenta` de avisos ya existe).
+- Rotar credenciales (contraseña de PostgreSQL y `JWT_SECRET`) antes de publicar.
+- Límite de intentos en el login, `helmet` y CORS restringido al publicar.
+- Validar `negocios.activo` en login y `requiereAuth` (hoy no se chequea).
+- Fijar la zona horaria del servidor (`America/Argentina/Buenos_Aires`): `CURRENT_DATE` depende de ella.
+- Redondear a 2 decimales los totales de ventas y avisar si un pago supera la deuda.
 - Manual de usuario para comercios (lenguaje no técnico).
 - Hosting con disponibilidad continua + backup automático de la base de datos.
 

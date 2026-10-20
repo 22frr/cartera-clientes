@@ -3,6 +3,7 @@ import { logout, nombreNegocio } from './api';
 import { useCatalogo } from './CatalogoContext';
 import ThemeToggle from './ThemeToggle';
 import Logo from './Logo';
+import { useNavigate } from 'react-router-dom';
 
 // Cabecera única de la app. Todas las pantallas la usan, así el diseño se cambia en un solo lugar.
 //
@@ -77,6 +78,7 @@ export function MenuNegocio() {
   const [abierto, setAbierto] = useState(false);
   const caja = useRef(null);
   const negocio = nombreNegocio();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!abierto) return;
@@ -115,6 +117,14 @@ export function MenuNegocio() {
         >
           <p className="px-3 py-2 font-display font-bold break-words border-b-2 border-slate-200 dark:border-slate-600 mb-1">
             {negocio}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setAbierto(false); navigate('/configuracion'); }}
+            className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          >
+            ⚙️ Configuración
+          </button>
           </p>
           <button
             type="button"
