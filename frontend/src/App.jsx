@@ -79,19 +79,23 @@ export default function App() {
   const [seleccionando, setSeleccionando] = useState(false);
   const [seleccionados, setSeleccionados] = useState(new Set());
   const [procesando, setProcesando] = useState(false);
+  const [cargando, setCargando] = useState(true);
+
 
   async function cargar() {
-    try {
-      const [c, r] = await Promise.all([getClientes(verArchivados), getResumen()]);
-      setClientes(c);
-      setResumen(r);
-      setError('');
-    } catch (e) {
-      setError(e.message);
-    }
+  try {
+    const [c, r] = await Promise.all([getClientes(verArchivados), getResumen()]);
+    setClientes(c);
+    setResumen(r);
+    setError('');
+  } catch (e) {
+    setError(e.message);
+  } finally {
+    setCargando(false);
   }
+}
 
-  useEffect(() => { cargar(); }, [verArchivados]);
+  useEffect(() => { setClientes([]); setCargando(true); cargar(); }, [verArchivados]);
     // Si otra pestaña cambió algo (pago, compra, anulación...), se recarga la lista
   useEffect(() => alCambiarDatos(cargar), [verArchivados]);
   // Otras pantallas avisan cuando algo cambia (ej. "Deshacer" de un archivado hecho en la ficha)
@@ -537,9 +541,59 @@ export default function App() {
                 )}
               </li>
             ))}
-            {visibles.length === 0 && (
-              <p className="text-center text-slate-600 dark:text-slate-300 py-6">No hay clientes para mostrar.</p>
-            )}
+            {cargando && [0, 1, 2].map((i) => (
+            <li key={i} aria-hidden="true" className="tarjeta px-4 py-3 flex justify-between items-center gap-3 min-h-[92px] sm:min-h-[76px] animate-pulse">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-1/2 rounded bg-slate-200 dark:bg-slate-700" />
+                  <div className="h-3 w-3/4 rounded bg-slate-200 dark:bg-slate-700" />
+                </div>
+              </div>
+              <div className="h-5 w-16 rounded bg-slate-200 dark:bg-slate-700 shrink-0" />
+            </li>
+          ))}
+
+          {!cargando && !error && clientes.length === 0 && (
+            verArchivados ? (
+              <li className="text-center text-slate-700 dark:text-slate-300 py-6">No hay clientes archivados.</li>
+            ) : (
+              <li className="tarjeta p-6 text-center space-y-3">
+                <div className="mx-auto w-12 h-12 rounded-full bg-marca-100 dark:bg-marca-900 flex items-center justify-center text-2xl" aria-hidden="true">👥</div>
+                <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Cargá tu primer cliente</p>
+                <p className="text-sm text-slate-700 dark:text-slate-300">
+                  Acá vas a ver quién te debe, hace cuánto no paga y a quién avisarle.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2 pt-1">
+                  <button
+                    onClick={() => setMostrarForm(true)}
+                    className="bg-marca-600 hover:bg-marca-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    + Agregar cliente
+                  </button>
+                  <button
+                    onClick={() => setImportando(true)}
+                    className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
+                  >
+                    📥 Importar desde Excel
+                  </button>
+                </div>
+              </li>
+            )
+          )}
+
+          {!cargando && clientes.length > 0 && visibles.length === 0 && (
+            <li className="tarjeta p-6 text-center space-y-3">
+              <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Ningún cliente coincide</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300">Probá con otro nombre o cambiá el filtro.</p>
+              <button
+                onClick={limpiarFiltros}
+                className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
+              >
+                Limpiar filtros
+              </button>
+            </li>
+          )}
           </ul>
         )}
       </main>
