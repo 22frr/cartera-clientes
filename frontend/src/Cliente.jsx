@@ -762,11 +762,24 @@ export default function Cliente() {
 
   async function confirmarPago(e) {
     e.preventDefault();
-    if (!(Number(montoPago) > 0)) {
-      setErrorForm('Ingresá un monto mayor a 0');
-      return;
-    }
-    try {
+          if (!(Number(montoPago) > 0)) {
+        setErrorForm('Ingresá un monto mayor a 0');
+        return;
+      }
+      const saldo = Number(cliente.saldo);
+      const monto = Number(montoPago);
+      if (monto > saldo + 0.005) {
+        const aFavor = dinero(monto - Math.max(saldo, 0));
+        const ok = await confirmar({
+          titulo: 'El pago supera la deuda',
+          texto: saldo > 0
+            ? `Debe ${dinero(saldo)} y estás cargando ${dinero(monto)}. El saldo quedaría a favor del cliente en ${aFavor}.`
+            : `El cliente no debe nada y estás cargando ${dinero(monto)}. El saldo quedaría a favor del cliente en ${aFavor}.`,
+          boton: 'Registrar igual',
+        });
+        if (!ok) return;
+      }
+      try {
       await crearPago({
         cliente_id: Number(id),
         monto: Number(montoPago),
@@ -1529,12 +1542,31 @@ async function eliminarMovsSeleccionados() {
                 );
               })}
               {movsVisibles.length === 0 && (
-                <p className="text-center text-slate-600 dark:text-slate-300 py-6">
-                  {vista === 'anulados' ? 'No hay movimientos anulados.' : 'No hay movimientos para mostrar.'}
-                </p>
+                vista === 'anulados' ? (
+                  <p className="text-center text-slate-700 dark:text-slate-300 py-6">No hay movimientos anulados.</p>
+                ) : movs.some((m) => !m.anulado) ? (
+                  <li className="tarjeta p-6 text-center space-y-3">
+                    <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Ningún movimiento coincide</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">Probá con otro filtro.</p>
+                    <button
+                      onClick={() => setFiltroTipo('todos')}
+                      className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
+                    >
+                      Limpiar filtros
+                    </button>
+                  </li>
+                ) : (
+                  <li className="tarjeta p-6 text-center space-y-3">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-marca-100 dark:bg-marca-900 flex items-center justify-center text-2xl" aria-hidden="true">🧾</div>
+                    <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Todavía no hay movimientos</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      Registrá la primera compra o pago con sus respectivos botones.
+                    </p>
+                  </li>
+                )
               )}
             </ul>
-          </>
+          </> 
         )}
       </main>
     </div>

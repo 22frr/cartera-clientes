@@ -556,8 +556,14 @@ export default function App() {
 
           {!cargando && !error && clientes.length === 0 && (
             verArchivados ? (
-              <li className="text-center text-slate-700 dark:text-slate-300 py-6">No hay clientes archivados.</li>
-            ) : (
+                <li className="tarjeta p-6 text-center space-y-3">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl" aria-hidden="true">🗂️</div>
+                  <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">No hay clientes archivados</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    Los clientes que archives aparecen acá. Podés restaurarlos cuando quieras.
+                  </p>
+                </li>
+              ) : (
               <li className="tarjeta p-6 text-center space-y-3">
                 <div className="mx-auto w-12 h-12 rounded-full bg-marca-100 dark:bg-marca-900 flex items-center justify-center text-2xl" aria-hidden="true">👥</div>
                 <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Cargá tu primer cliente</p>

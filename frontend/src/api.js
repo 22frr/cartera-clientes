@@ -242,7 +242,8 @@ export const dinero = (valor) =>
   Number(valor).toLocaleString('es-AR', {
     style: 'currency',
     currency: 'ARS',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   });
 
 export const fecha = (valor) => {

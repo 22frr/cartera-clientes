@@ -20,6 +20,7 @@ No es un sistema exclusivo para kioscos. Está diseñado para **cualquier comerc
 - Búsqueda sin distinguir tildes ni mayúsculas ("jose" encuentra "José").
 - Filtros (Todos / Deben / Atrasados / Al día) y 6 criterios de orden. Se recuerdan mientras la pestaña esté abierta, así al entrar a un cliente y volver la lista sigue como estaba.
 - Selección múltiple para archivar, restaurar o eliminar en bloque, con botón **Todos / Ninguno** junto a la acción principal. Selecciona solo los clientes que se ven con el filtro actual.
+- Estados de la lista: esqueleto gris mientras carga, guía de bienvenida (con "Agregar cliente" e "Importar desde Excel") en un negocio sin clientes, y mensaje con "Limpiar filtros" cuando la búsqueda o el filtro no encuentran resultados (ver 5.29).
 
 **Compras y pagos**
 - Compra **rápida** (monto + descripción opcional) o **con productos** (planilla con varios productos, cálculo automático de cantidad × precio = total y viceversa, navegación con Enter y flechas). El modo elegido se recuerda en el navegador.
@@ -242,6 +243,9 @@ Estas decisiones no son obvias leyendo solo el código, así que quedan document
 26. **Mensaje del recordatorio como plantilla simple:** texto libre con cuatro palabras entre llaves (`{cliente}`, `{saldo}`, `{negocio}`, `{pago}`, sin distinguir mayúsculas). Si el negocio no cargó alias, la línea que contiene `{pago}` no se envía. Si el campo se guarda vacío se usa `PLANTILLA_POR_DEFECTO` (en `cobranza.js`), así los cambios del mensaje base llegan a quien no lo personalizó. Se descartó un editor con botones y vista previa por ser más engorroso que útil. Los clientes al día reciben siempre un mensaje fijo ("tu cuenta está al día"). El punto final del mensaje base va separado del alias (`{pago} .`) para que al copiar el alias no se copie el punto.
 27. **Código de área vacío por defecto en negocios nuevos:** antes estaba fijo en `342` (la zona del primer cliente). Asumirlo en otro comercio abriría el WhatsApp de otra persona; es preferible que un teléfono sin código figure como "Sin teléfono válido". La normalización en `cobranza.js` funciona con áreas de 2, 3 o 4 dígitos (un número argentino son 10 dígitos entre área y local).
 28. **Índices sobre las claves foráneas:** PostgreSQL no las indexa solo. Se agregaron `ventas(cliente_id, fecha)`, `pagos(cliente_id, fecha)`, `venta_items(venta_id)` y `clientes(negocio_id, archivado)`, porque la lista de clientes hace varias subconsultas por fila.
+29. **Tres estados distintos para la lista de clientes:** antes un solo texto ("No hay clientes para mostrar") cubría tres situaciones distintas y confundía. Ahora `App.jsx` distingue: (a) `cargando`: tres tarjetas grises con la forma de la lista real (`animate-pulse`), solo en la primera carga y al cambiar entre activos y archivados; las recargas automáticas de `sync.js` no lo disparan, así que no parpadea. (b) Negocio sin clientes: guía con "Agregar cliente" e "Importar desde Excel", solo si no hay ningún cliente cargado y no hubo error (si falla la carga se ve la caja roja, no la guía). En archivados vacíos se muestra un texto simple. (c) Filtros o búsqueda sin resultados: mensaje corto con "Limpiar filtros". No toca backend ni base de datos. El mismo criterio se aplica en otras dos pantallas: los archivados vacíos muestran una tarjeta que explica para qué sirve la pantalla, y el historial de un cliente distingue tres casos (cliente sin movimientos: guía para registrar el primero; filtro por tipo sin resultados: "Limpiar filtros", que solo resetea el tipo y no el orden; anulados vacío: texto simple, porque esa vista casi nunca se ve vacía).
+30. **Zona horaria fija y negocios desactivables:** (a) `db.js` ejecuta `SET TIME ZONE 'America/Argentina/Buenos_Aires'` en cada conexión nueva del pool, así `CURRENT_DATE` (fecha por defecto de compras y pagos, y "días sin pagar") no depende de la zona del servidor; en un hosting suele ser UTC y de noche las fechas quedarían corridas un día. (b) `negocios.activo = FALSE` bloquea la cuenta: el login responde 403 con "Esta cuenta está desactivada" (se chequea después de la contraseña, para no revelar si el usuario existe) y `requiereAuth` consulta `activo` en cada pedido, así también queda afuera quien ya tenía la sesión abierta (responde 401 "Cuenta desactivada"). Costo aceptado: una consulta por clave primaria en cada pedido. Limitación conocida: el frontend trata todo 401 como sesión vencida, así que quien estaba logueado ve "Tu sesión expiró" y no el mensaje de cuenta desactivada hasta que intente entrar de nuevo. Para suspender o reactivar: `UPDATE negocios SET activo = FALSE WHERE id = X;` (o `TRUE`).
+31. **Redondeo a 2 decimales, aviso de pago excedido y montos con centavos:** (a) `ventas.js` usa un helper `redondear` para cada subtotal y para el total (que pasa a ser la suma de los subtotales ya redondeados), así la suma de los ítems siempre coincide con el total y se evitan errores de coma flotante como `0.1 * 3 = 0.30000000000000004`. (b) Al registrar un pago mayor al saldo (o a un cliente sin deuda), `confirmarPago` en `Cliente.jsx` pide confirmación con el texto "El pago supera la deuda" y el monto que quedaría a favor del cliente. Se eligió confirmar y no bloquear, porque el pago adelantado es un caso válido; el botón no es rojo porque el pago se puede anular. Si se cancela, vuelve al formulario con lo escrito. El backend no redondea pagos porque `monto` ya es `NUMERIC(12,2)`. (c) `dinero()` en `api.js` muestra decimales solo cuando el monto los tiene (`minimumFractionDigits: 0`, `maximumFractionDigits: 2`): `$ 55.472` sigue igual y `$ 3,33` ya no se ve como `$ 3`. Las exportaciones a Excel usan su propio formato y no cambian.
 
 ## 6. Estado actual y pendientes conocidos
 
@@ -250,11 +254,10 @@ Estas decisiones no son obvias leyendo solo el código, así que quedan document
 - "Enviar cuenta" por WhatsApp (saldo y últimos movimientos; el tipo `cuenta` de avisos ya existe).
 - Rotar credenciales (contraseña de PostgreSQL y `JWT_SECRET`) antes de publicar.
 - Límite de intentos en el login, `helmet` y CORS restringido al publicar.
-- Validar `negocios.activo` en login y `requiereAuth` (hoy no se chequea).
-- Fijar la zona horaria del servidor (`America/Argentina/Buenos_Aires`): `CURRENT_DATE` depende de ella.
-- Redondear a 2 decimales los totales de ventas y avisar si un pago supera la deuda.
 - Manual de usuario para comercios (lenguaje no técnico).
 - Hosting con disponibilidad continua + backup automático de la base de datos.
+- Estados vacíos y de carga (la lista dice "No hay clientes" mientras carga; un negocio nuevo no ve guía).
+
 
 ### 6.2 Pendiente antes de vender a terceros
 - Alta de cuenta autoservicio (sin depender de scripts de línea de comandos).
@@ -342,7 +345,7 @@ Reglas para toda pantalla nueva o modificada. Existen para que nada vuelva a ver
 - Las acciones de uso diario quedan visibles; las ocasionales van en el menú "⋯ Más". Evitar más de 2 o 3 botones secundarios en una misma fila.
 
 **Fechas y montos**
-- Fechas visibles como `dd/mm/aaaa`; internamente `AAAA-MM-DD`. Montos en pesos sin decimales (`es-AR`).
+- Fechas visibles como `dd/mm/aaaa`; internamente `AAAA-MM-DD`. Montos en pesos (`es-AR`), sin decimales salvo que el monto tenga centavos.
 - Las fechas de compras, pagos e importaciones se validan en el servidor (`fechas.js`).
 
 **Excel**

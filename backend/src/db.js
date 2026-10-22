@@ -11,4 +11,9 @@ const pool = new pg.Pool({
   database: process.env.DB_NAME,
 });
 
+// Cada conexión usa hora argentina: CURRENT_DATE depende de esto (en un hosting suele ser UTC)
+pool.on('connect', (client) => {
+  client.query("SET TIME ZONE 'America/Argentina/Buenos_Aires'").catch((e) => console.error('Zona horaria:', e.message));
+});
+
 export default pool;

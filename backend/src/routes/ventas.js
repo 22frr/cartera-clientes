@@ -6,6 +6,9 @@ import { fechaRazonable, MENSAJE_FECHA } from '../fechas.js';
 const router = Router();
 router.use(requiereAuth);
 
+
+const redondear = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
 function validarItems(items) {
   if (!Array.isArray(items) || items.length === 0) {
     return 'Debe haber al menos un producto';
@@ -40,7 +43,7 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
-    const total = items.reduce((acc, it) => acc + Number(it.cantidad) * Number(it.precio_unitario), 0);
+    const total = redondear(items.reduce((acc, it) => acc + redondear(Number(it.cantidad) * Number(it.precio_unitario)), 0));
 
     const { rows } = await client.query(
       `INSERT INTO ventas (negocio_id, cliente_id, fecha, total, observacion)
@@ -50,7 +53,7 @@ router.post('/', async (req, res) => {
     const venta = rows[0];
 
     for (const it of items) {
-      const subtotal = Number(it.cantidad) * Number(it.precio_unitario);
+      const subtotal = redondear(Number(it.cantidad) * Number(it.precio_unitario));
       await client.query(
         `INSERT INTO venta_items (venta_id, producto, cantidad, precio_unitario, subtotal)
          VALUES ($1, $2, $3, $4, $5)`,

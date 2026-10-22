@@ -12,7 +12,7 @@ router.post('/login', async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `SELECT u.*, n.nombre AS negocio_nombre FROM usuarios u
+      `SELECT u.*, n.nombre AS negocio_nombre, n.activo AS negocio_activo FROM usuarios u
        JOIN negocios n ON n.id = u.negocio_id
        WHERE u.usuario = $1`,
       [usuario]
@@ -22,6 +22,9 @@ router.post('/login', async (req, res) => {
     const user = rows[0];
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+    if (user.negocio_activo === false) {
+      return res.status(403).json({ error: 'Esta cuenta está desactivada. Contactá al administrador.' });
+    }
 
     const token = jwt.sign(
       { negocio_id: user.negocio_id, usuario: user.usuario },
