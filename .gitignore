@@ -1,3 +1,7 @@
 estado_proyecto.md
 .env
+!.env.example
 node_modules
+dist/
+artifacts/
+.qa-clean/

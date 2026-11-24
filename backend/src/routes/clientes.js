@@ -130,11 +130,12 @@ router.get('/:id/movimientos', async (req, res) => {
             'producto', vi.producto, 'cantidad', vi.cantidad,
             'precio_unitario', vi.precio_unitario, 'subtotal', vi.subtotal
           ) ORDER BY vi.id)
-         FROM venta_items vi WHERE vi.venta_id = v.id) AS items
+         FROM venta_items vi WHERE vi.venta_id = v.id) AS items,
+        NULL::varchar AS medio_pago
       FROM ventas v
       WHERE v.cliente_id = $1
       UNION ALL
-      SELECT p.id, 'pago' AS tipo, p.fecha, p.monto, p.anulado, p.creado_en, p.observacion, NULL AS items
+      SELECT p.id, 'pago' AS tipo, p.fecha, p.monto, p.anulado, p.creado_en, p.observacion, NULL AS items, p.medio_pago
       FROM pagos p
       WHERE p.cliente_id = $1
       ORDER BY fecha DESC, creado_en DESC

@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getClientes, getResumen, crearCliente, archivarCliente, restaurarCliente, eliminarCliente, dinero, nombreNegocio } from './api';
 import Cabecera, { AccionesCabecera } from './Cabecera';
-import { NOMBRE_APP } from './marca';
 import { useToast, AvisoForm } from './ToastContext';
 import { useConfirmar } from './ConfirmContext';
 import { flechasEnFormulario } from './teclado';
@@ -13,7 +12,7 @@ import ImportarExcel from './ImportarExcel';
 import { exportarClientes } from './excel';
 import MenuMas from './MenuMas';
 import { alCambiarDatos } from './sync';
-
+import { LOGO_MERCADO_PAGO } from './logoMercadoPago';
 
 // Minúsculas y sin tildes, para que "jose" encuentre "José"
 function normalizar(s) {
@@ -43,10 +42,11 @@ function useEstadoPersistido(clave, valorInicial) {
   return [valor, setValor];
 }
 
+// De lo más urgente a lo menos
 const ESTADOS = [
   ['todos', 'Todos'],
-  ['deben', 'Deben'],
   ['atrasados', 'Atrasados'],
+  ['deben', 'Deben'],
   ['aldia', 'Al día'],
 ];
 
@@ -82,28 +82,29 @@ export default function App() {
   const [cargando, setCargando] = useState(true);
 
 
-  async function cargar() {
-  try {
-    const [c, r] = await Promise.all([getClientes(verArchivados), getResumen()]);
-    setClientes(c);
-    setResumen(r);
-    setError('');
-  } catch (e) {
-    setError(e.message);
-  } finally {
-    setCargando(false);
-  }
-}
+  const cargar = useCallback(async () => {
+    try {
+      const [c, r] = await Promise.all([getClientes(verArchivados), getResumen()]);
+      setClientes(c);
+      setResumen(r);
+      setError('');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCargando(false);
+    }
+  }, [verArchivados]);
 
-  useEffect(() => { setClientes([]); setCargando(true); cargar(); }, [verArchivados]);
-    // Si otra pestaña cambió algo (pago, compra, anulación...), se recarga la lista
-  useEffect(() => alCambiarDatos(cargar), [verArchivados]);
+  // oxlint-disable-next-line react/set-state-in-effect -- Al cambiar de lista se descartan datos de la consulta anterior.
+  useEffect(() => { setClientes([]); setCargando(true); cargar(); }, [cargar]);
+  // Si otra pestaña cambió algo (pago, compra, anulación...), se recarga la lista
+  useEffect(() => alCambiarDatos(cargar), [cargar]);
   // Otras pantallas avisan cuando algo cambia (ej. "Deshacer" de un archivado hecho en la ficha)
   useEffect(() => {
     const alCambiar = () => cargar();
     window.addEventListener('clientes-cambiaron', alCambiar);
     return () => window.removeEventListener('clientes-cambiaron', alCambiar);
-  }, [verArchivados]);
+  }, [cargar]);
 
   function cancelarSeleccion() {
     setSeleccionando(false);
@@ -143,7 +144,8 @@ export default function App() {
   function toggleSeleccion(idCliente) {
     setSeleccionados((prev) => {
       const nuevo = new Set(prev);
-      nuevo.has(idCliente) ? nuevo.delete(idCliente) : nuevo.add(idCliente);
+      if (nuevo.has(idCliente)) nuevo.delete(idCliente);
+      else nuevo.add(idCliente);
       return nuevo;
     });
   }
@@ -244,6 +246,7 @@ export default function App() {
   // A quiénes se les puede avisar: los que deben y se ven con el filtro actual
   const conDeuda = visibles.filter((c) => Number(c.saldo) > 0);
   const todosSeleccionados = visibles.length > 0 && visibles.every((c) => seleccionados.has(c.id));
+  const nombreOrden = ORDENES.find(([v]) => v === orden)?.[1] ?? '';
 
   function alternarTodos() {
     setSeleccionados(todosSeleccionados ? new Set() : new Set(visibles.map((c) => c.id)));
@@ -278,12 +281,12 @@ export default function App() {
       <Cabecera
         variante={verArchivados ? 'archivados' : 'principal'}
         onVolver={verArchivados ? salirDeArchivados : undefined}
-        titulo={verArchivados ? 'Clientes archivados' : NOMBRE_APP}
+        titulo={verArchivados ? 'Clientes archivados' : 'Tus clientes'}
         subtitulo={verArchivados ? 'Podés restaurarlos o eliminarlos' : nombreNegocio()}
         acciones={<AccionesCabecera menu />}
       />
 
-      <main className="max-w-3xl mx-auto p-4 space-y-4">
+      <main className="max-w-3xl mx-auto p-4 space-y-3">
         {importando && (
           <ImportarExcel tipo="clientes" onCerrar={() => setImportando(false)} onListo={cargar} />
         )}
@@ -292,132 +295,132 @@ export default function App() {
           <div className="bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 p-3 rounded-lg">{error}</div>
         )}
 
-        {resumen && !verArchivados && (
-          <div className="grid grid-cols-[1.7fr_1fr_1fr] sm:grid-cols-3 gap-3">
-            <Tarjeta titulo="Te deben" valor={dinero(resumen.total_deuda)} destacado />
-            <Tarjeta titulo="Con deuda" valor={resumen.clientes_con_deuda} />
-            <Tarjeta titulo="Clientes" valor={resumen.total_clientes} />
-          </div>
-        )}
+        {resumen && !verArchivados && <ResumenCard resumen={resumen} />}
 
-        {!verArchivados && !mostrarForm && estado !== 'atrasados' && cantAtrasados > 0 && (
-          <button
-            type="button"
-            onClick={() => { setEstado('atrasados'); setOrden('antiguedad'); }}
-            className="w-full text-left text-xs sm:text-sm rounded-xl px-3 py-2 bg-amber-50 dark:bg-amber-950 border-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors"
-          >
-            ⚠️ {cantAtrasados === 1 ? '1 cliente' : `${cantAtrasados} clientes`} con más de {DIAS_ATRASADO} días sin pagar.{' '}
-            <span className="underline font-medium">Ver</span>
-          </button>
-        )}
-
-        <div className="flex gap-2">
-          {!mostrarForm && (
+        {/* Buscador + orden + nuevo cliente */}
+        {!mostrarForm && (
+          <div className="flex gap-2">
             <input
               className="flex-1 min-w-0 border-2 border-slate-400 dark:border-slate-700 rounded-lg px-3 py-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-marca-500"
               placeholder="Buscar cliente..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />
-          )}
-          {!verArchivados && !mostrarForm && (
-            <button
-              className="bg-marca-600 hover:bg-marca-700 text-white px-4 rounded-lg font-semibold transition-colors shrink-0"
-              onClick={() => setMostrarForm(true)}
+            {/* El select real va encima (invisible): abre el selector nativo del celular */}
+            <label
+              title={`Orden: ${nombreOrden}`}
+              className={`relative shrink-0 w-11 rounded-lg border-2 flex items-center justify-center focus-within:ring-2 focus-within:ring-marca-500 ${
+                orden !== 'az'
+                  ? 'border-marca-600 bg-marca-100 dark:bg-marca-900 text-marca-700 dark:text-marca-300'
+                  : 'border-slate-400 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+              }`}
             >
-              + Cliente
-            </button>
-          )}
-        </div>
-
-        {!mostrarForm && (
-          <div className="space-y-2">
-            {/* Filtros: en el celular se deslizan hacia los costados si no entran */}
-            <div className="-mx-4 px-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex gap-1.5 w-max">
-                {ESTADOS.map(([valor, etiqueta]) => (
-                  <button
-                    key={valor}
-                    onClick={() => setEstado(valor)}
-                    className={`text-xs px-3 py-1.5 rounded-full border-2 whitespace-nowrap transition-colors ${
-                      estado === valor
-                        ? 'bg-marca-600 border-marca-600 text-white'
-                        : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
-                    }`}
-                  >
-                    {etiqueta}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Contador + orden */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 flex-wrap min-w-0 text-xs text-slate-600 dark:text-slate-300">
-                <span className="whitespace-nowrap">
-                  {visibles.length} cliente{visibles.length !== 1 ? 's' : ''}
-                </span>
-                {hayFiltros && (
-                  <button onClick={limpiarFiltros} className="underline text-marca-600 dark:text-marca-400 whitespace-nowrap">
-                    Limpiar filtros
-                  </button>
-                )}
-              </div>
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4" />
+              </svg>
               <select
+                aria-label="Ordenar clientes"
                 value={orden}
                 onChange={(e) => setOrden(e.target.value)}
-                className="shrink-0 text-xs border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-marca-500"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               >
                 {ORDENES.map(([valor, etiqueta]) => (
                   <option key={valor} value={valor}>{etiqueta}</option>
                 ))}
               </select>
-            </div>
-
-            {/* Acciones: lo de todos los días a la vista, el resto en "Más" */}
-            <div className="flex items-center justify-end gap-2">
-              {!verArchivados && conDeuda.length > 0 && (
-                <button
-                  onClick={() => setAvisando(true)}
-                  className="mr-auto text-xs font-semibold px-3 py-1.5 rounded-full border-2 border-marca-600 hover:border-marca-700 bg-marca-600 hover:bg-marca-700 text-white transition-colors"
-                >
-                  📣 Avisar ({conDeuda.length})
-                </button>
-              )}
+            </label>
+            {!verArchivados && (
               <button
-                onClick={() => (seleccionando ? cancelarSeleccion() : setSeleccionando(true))}
-                className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
-                  seleccionando
-                    ? 'bg-amber-400 border-amber-500 text-slate-900'
-                    : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
-                }`}
+                className="bg-marca-600 hover:bg-marca-700 text-white px-4 rounded-lg font-semibold transition-colors shrink-0"
+                onClick={() => setMostrarForm(true)}
               >
-                {seleccionando ? 'Cancelar' : 'Seleccionar'}
+                + Cliente
               </button>
-              <MenuMas
-                items={[
-                  !verArchivados && {
-                    icono: '📥',
-                    titulo: 'Importar desde Excel',
-                    detalle: 'Cargar clientes, con su saldo inicial',
-                    onClick: () => setImportando(true),
-                  },
-                  {
-                    icono: '📤',
-                    titulo: 'Exportar a Excel',
-                    detalle: visibles.length > 0 ? 'Descargar la lista que estás viendo' : 'No hay clientes para exportar',
-                    deshabilitado: visibles.length === 0,
-                    onClick: exportar,
-                  },
-                  !verArchivados && {
-                    icono: '🗂️',
-                    titulo: 'Ver archivados',
-                    detalle: 'Clientes que ocultaste de la lista',
-                    onClick: irAArchivados,
-                  },
-                ]}
-              />
-            </div>
+            )}
+          </div>
+        )}
+
+        {/* Filtros: un solo botón dividido en partes */}
+        {!mostrarForm && (
+          <div className="flex rounded-full border-2 border-slate-500 dark:border-slate-600 overflow-hidden">
+            {ESTADOS.map(([valor, etiqueta], i) => {
+              const alerta = valor === 'atrasados' && cantAtrasados > 0;
+              return (
+                <button
+                  key={valor}
+                  onClick={() => setEstado(valor)}
+                  aria-pressed={estado === valor}
+                  title={alerta ? `Más de ${DIAS_ATRASADO} días sin pagar` : undefined}
+                  className={`flex-1 whitespace-nowrap text-xs px-2 py-2 transition-colors ${
+                    i > 0 ? 'border-l-2 border-slate-500 dark:border-slate-600' : ''
+                  } ${
+                    estado === valor
+                      ? 'bg-marca-600 text-white'
+                      : alerta
+                        ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {etiqueta}{alerta ? ` (${cantAtrasados})` : ''}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+
+
+
+        {!mostrarForm && (
+          <div className="flex items-center justify-end gap-2">
+            {hayFiltros && (
+              <div className="mr-auto min-w-0 flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+                <span className="whitespace-nowrap">{visibles.length} de {clientes.length} clientes.</span>
+                <button onClick={limpiarFiltros} className="underline text-marca-600 dark:text-marca-400 whitespace-nowrap">
+                  Limpiar
+                </button>
+              </div>
+            )}
+            <button
+              onClick={() => (seleccionando ? cancelarSeleccion() : setSeleccionando(true))}
+              className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
+                seleccionando
+                  ? 'bg-amber-400 border-amber-500 text-slate-900'
+                  : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
+              }`}
+            >
+              {seleccionando ? 'Cancelar' : 'Seleccionar'}
+            </button>
+            <MenuMas
+              items={[
+
+                !verArchivados && conDeuda.length > 0 && {
+                  icono: '📣',
+                  titulo: `Avisar a deudores (${conDeuda.length})`,
+                  detalle: 'Mandar recordatorios por WhatsApp',
+                  onClick: () => setAvisando(true),
+                },
+                !verArchivados && {
+                  icono: '📥',
+                  titulo: 'Importar desde Excel',
+                  detalle: 'Cargar clientes, con su saldo inicial',
+                  onClick: () => setImportando(true),
+                },
+                {
+                  icono: '📤',
+                  titulo: 'Exportar a Excel',
+                  detalle: visibles.length > 0 ? 'Descargar la lista que estás viendo' : 'No hay clientes para exportar',
+                  deshabilitado: visibles.length === 0,
+                  onClick: exportar,
+                },
+                !verArchivados && {
+                  icono: '🗂️',
+                  titulo: 'Ver archivados',
+                  detalle: 'Clientes que ocultaste de la lista',
+                  onClick: irAArchivados,
+                },
+              ]}
+            />
           </div>
         )}
 
@@ -443,7 +446,7 @@ export default function App() {
           </form>
         )}
 
-       {!mostrarForm && seleccionando && (
+        {!mostrarForm && seleccionando && (
           <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-xl sticky top-2 z-10 shadow-lg">
             <span className="text-sm font-medium">
               {seleccionados.size === 0 ? 'Elegí clientes' : `${seleccionados.size} seleccionado${seleccionados.size !== 1 ? 's' : ''}`}
@@ -542,20 +545,20 @@ export default function App() {
               </li>
             ))}
             {cargando && [0, 1, 2].map((i) => (
-            <li key={i} aria-hidden="true" className="tarjeta px-4 py-3 flex justify-between items-center gap-3 min-h-[92px] sm:min-h-[76px] animate-pulse">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-1/2 rounded bg-slate-200 dark:bg-slate-700" />
-                  <div className="h-3 w-3/4 rounded bg-slate-200 dark:bg-slate-700" />
+              <li key={i} aria-hidden="true" className="tarjeta px-4 py-3 flex justify-between items-center gap-3 min-h-[92px] sm:min-h-[76px] animate-pulse">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-1/2 rounded bg-slate-200 dark:bg-slate-700" />
+                    <div className="h-3 w-3/4 rounded bg-slate-200 dark:bg-slate-700" />
+                  </div>
                 </div>
-              </div>
-              <div className="h-5 w-16 rounded bg-slate-200 dark:bg-slate-700 shrink-0" />
-            </li>
-          ))}
+                <div className="h-5 w-16 rounded bg-slate-200 dark:bg-slate-700 shrink-0" />
+              </li>
+            ))}
 
-          {!cargando && !error && clientes.length === 0 && (
-            verArchivados ? (
+            {!cargando && !error && clientes.length === 0 && (
+              verArchivados ? (
                 <li className="tarjeta p-6 text-center space-y-3">
                   <div className="mx-auto w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl" aria-hidden="true">🗂️</div>
                   <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">No hay clientes archivados</p>
@@ -564,42 +567,42 @@ export default function App() {
                   </p>
                 </li>
               ) : (
-              <li className="tarjeta p-6 text-center space-y-3">
-                <div className="mx-auto w-12 h-12 rounded-full bg-marca-100 dark:bg-marca-900 flex items-center justify-center text-2xl" aria-hidden="true">👥</div>
-                <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Cargá tu primer cliente</p>
-                <p className="text-sm text-slate-700 dark:text-slate-300">
-                  Acá vas a ver quién te debe, hace cuánto no paga y a quién avisarle.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2 pt-1">
-                  <button
-                    onClick={() => setMostrarForm(true)}
-                    className="bg-marca-600 hover:bg-marca-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
-                  >
-                    + Agregar cliente
-                  </button>
-                  <button
-                    onClick={() => setImportando(true)}
-                    className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
-                  >
-                    📥 Importar desde Excel
-                  </button>
-                </div>
-              </li>
-            )
-          )}
+                <li className="tarjeta p-6 text-center space-y-3">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-marca-100 dark:bg-marca-900 flex items-center justify-center text-2xl" aria-hidden="true">👥</div>
+                  <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Cargá tu primer cliente</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    Acá vas a ver quién te debe, hace cuánto no paga y a quién avisarle.
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2 pt-1">
+                    <button
+                      onClick={() => setMostrarForm(true)}
+                      className="bg-marca-600 hover:bg-marca-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                    >
+                      + Agregar cliente
+                    </button>
+                    <button
+                      onClick={() => setImportando(true)}
+                      className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
+                    >
+                      📥 Importar desde Excel
+                    </button>
+                  </div>
+                </li>
+              )
+            )}
 
-          {!cargando && clientes.length > 0 && visibles.length === 0 && (
-            <li className="tarjeta p-6 text-center space-y-3">
-              <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Ningún cliente coincide</p>
-              <p className="text-sm text-slate-700 dark:text-slate-300">Probá con otro nombre o cambiá el filtro.</p>
-              <button
-                onClick={limpiarFiltros}
-                className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
-              >
-                Limpiar filtros
-              </button>
-            </li>
-          )}
+            {!cargando && clientes.length > 0 && visibles.length === 0 && (
+              <li className="tarjeta p-6 text-center space-y-3">
+                <p className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Ningún cliente coincide</p>
+                <p className="text-sm text-slate-700 dark:text-slate-300">Probá con otro nombre o cambiá el filtro.</p>
+                <button
+                  onClick={limpiarFiltros}
+                  className="px-4 py-2 rounded-lg border-2 border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+              </li>
+            )}
           </ul>
         )}
       </main>
@@ -630,20 +633,87 @@ function InsigniaDias({ c, archivado }) {
   );
 }
 
-function Tarjeta({ titulo, valor, destacado }) {
-  // El tamaño baja según el largo del número, para que nunca se corte en el celular
-  const largo = String(valor).length;
-  const tam = largo > 12 ? 'text-sm' : largo > 9 ? 'text-base' : 'text-xl';
+const NOMBRES_MEDIO = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  mercadopago: 'Mercado Pago',
+  tarjeta: 'Tarjeta',
+  sin_medio: 'Sin especificar',
+};
+
+const EMOJIS_MEDIO = { efectivo: '💵', transferencia: '🏦', tarjeta: '💳' };
+
+// Mercado Pago usa el logo (imagen); los demás, emoji. Caja de ancho fijo para que todo quede alineado.
+function IconoMedio({ medio }) {
   return (
-    <div className={`tarjeta p-3 text-center min-w-0 ${
-      destacado
-        ? 'bg-red-50 dark:bg-red-950'
-        : ''
-    }`}>
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 leading-tight">{titulo}</p>
-      <p className={`numero font-display ${tam} sm:text-2xl font-extrabold whitespace-nowrap ${destacado ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
-        {valor}
-      </p>
+    <span aria-hidden="true" className="w-6 shrink-0 flex items-center justify-center leading-none">
+      {medio === 'mercadopago'
+        ? <img src={LOGO_MERCADO_PAGO} alt="" className="w-6 h-4 object-contain" />
+        : EMOJIS_MEDIO[medio]}
+    </span>
+  );
+}
+// Una sola tarjeta: lo que te deben + (abajo) cobrado y fiado de hoy.
+// Al tocar la parte de abajo se despliega el cobrado por medio de pago.
+function ResumenCard({ resumen }) {
+  const [abierto, setAbierto] = useState(false);
+  const hoy = resumen.hoy;
+  const medios = hoy ? Object.entries(hoy.por_medio) : [];
+  const n = Number(resumen.total_clientes);
+
+  return (
+    <div className="tarjeta overflow-hidden">
+      <div className="p-3 text-center bg-red-50 dark:bg-red-950">
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 leading-tight">Te deben</p>
+        <p className="numero font-display text-2xl font-extrabold whitespace-nowrap text-red-500">
+          {dinero(resumen.total_deuda)}
+        </p>
+        <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+          {Number(resumen.clientes_con_deuda)} con deuda · {n} cliente{n !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      {hoy && (
+        <div className="border-t-2 border-slate-900 dark:border-slate-500">
+          <button
+            type="button"
+            onClick={() => setAbierto((a) => !a)}
+            aria-expanded={abierto}
+            className="w-full flex items-center gap-3 px-3 py-2 text-left"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-tight">Cobrado hoy</p>
+              <p className="numero font-display text-base font-extrabold whitespace-nowrap text-marca-600 dark:text-marca-400">
+                {dinero(hoy.cobrado)}
+              </p>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-tight">Fiado hoy</p>
+              <p className="numero font-display text-base font-extrabold whitespace-nowrap text-red-500">
+                {dinero(hoy.fiado)}
+              </p>
+            </div>
+            <span aria-hidden="true" className={`shrink-0 text-slate-700 dark:text-slate-300 transition-transform ${abierto ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+
+          {abierto && (
+            <ul className="px-3 pb-2 pt-2 border-t-2 border-slate-300 dark:border-slate-600 space-y-1 text-sm text-slate-800 dark:text-slate-100">
+              {medios.length === 0 && (
+                <li className="text-slate-700 dark:text-slate-300">Todavía no cobraste nada hoy.</li>
+              )}
+              {medios.map(([medio, total]) => (
+                <li key={medio} className="flex justify-between gap-3">
+                  <span className="flex items-center gap-2">
+                    <IconoMedio medio={medio} />
+                    {NOMBRES_MEDIO[medio] ?? medio}
+                  </span>
+                  <span className="numero font-bold whitespace-nowrap">{dinero(total)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

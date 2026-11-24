@@ -4,9 +4,9 @@
 
 :root {
   --fondo: 246 249 253;      /* papel de cuaderno */
-  --linea: 15 23 42;         /* tinta (borde de tarjetas) */
-  --sombra: 15 23 42;        /* sombra dura */
-  --cuadricula: 96 140 200 / 0.16;
+  --linea: 203 213 225;
+  --sombra: 15 23 42 / 0.06;
+  --cuadricula: 96 140 200 / 0.06;
   --tarjeta: 255 255 255;
   --borde: 226 232 240;      /* slate-200 */
   --texto: 15 23 42;         /* slate-900 */
@@ -15,8 +15,8 @@
 
 .dark {
   --fondo: 15 23 42;         /* slate-900 */
-  --linea: 100 116 139;
-  --sombra: 0 0 0;
+  --linea: 51 65 85;
+  --sombra: 0 0 0 / 0.18;
   --cuadricula: 148 163 184 / 0.07;
   --tarjeta: 30 41 59;       /* slate-800 */
   --borde: 51 65 85;         /* slate-600 */
@@ -56,21 +56,24 @@ body {
 
   .tarjeta {
     background-color: rgb(var(--tarjeta));
-    border: 2px solid rgb(var(--linea));
+    border: 1px solid rgb(var(--linea));
     border-radius: 0.75rem;
-    box-shadow: 4px 4px 0 0 rgb(var(--sombra));
+    box-shadow: 0 4px 16px -8px rgb(var(--sombra));
   }
   .tarjeta-chica {
     background-color: rgb(var(--tarjeta));
-    border: 2px solid rgb(var(--linea));
+    border: 1px solid rgb(var(--linea));
     border-radius: 0.75rem;
-    box-shadow: 2px 2px 0 0 rgb(var(--sombra));
+    box-shadow: 0 2px 6px rgb(var(--sombra));
   }
 
   .cabecera {
-    @apply bg-marca-700 text-white;
-    border-bottom: 4px solid rgb(var(--sombra));
+    color: white;
+    background: #123c34;
+    border-bottom: 3px solid #6ee7b7;
   }
+  .cabecera[data-variante="archivados"] { background: #273549; border-color: #94a3b8; }
+  .cabecera[data-variante="avisar"] { background: #164258; border-color: #7dd3fc; }
 
   .boton-duro {
     border: 2px solid rgb(var(--linea));
@@ -82,10 +85,17 @@ body {
 
   .titulo-seccion {
     @apply font-display font-extrabold text-2xl text-slate-900 dark:text-white decoration-marca-500;
-    text-decoration-line: underline;
-    text-decoration-thickness: 4px;
-    text-underline-offset: 6px;
+    letter-spacing: -0.025em;
   }
+}
+
+button:focus-visible, a:focus-visible {
+  outline: 3px solid #10b981;
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  input, textarea, select { font-size: 16px; }
 }
 
 /* ---------- Avisos (toasts): misma tinta y sombra dura que las tarjetas ---------- */

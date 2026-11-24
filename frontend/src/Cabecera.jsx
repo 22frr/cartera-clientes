@@ -16,16 +16,15 @@ import { useNavigate } from 'react-router-dom';
 //     acciones={<AccionesCabecera menu />}
 //   />
 //
-// La variante cambia el color para que se note en qué modo estás.
-const FONDOS = {
-  principal: 'bg-marca-700',
-  catalogo: 'bg-marca-800',
-  archivados: 'bg-slate-700',
-  avisar: 'bg-sky-700',
+const SECCIONES = {
+  principal: 'La libreta de tu negocio',
+  catalogo: 'Productos y precios',
+  archivados: 'Archivo de clientes',
+  avisar: 'Seguimiento de cuentas',
 };
 
 const circulo =
-  'w-9 h-9 rounded-full flex items-center justify-center bg-white/15 hover:bg-white/25 transition-colors';
+  'w-10 h-10 rounded-xl flex items-center justify-center bg-white/10 hover:bg-white/20 transition-colors';
 
 function BotonVolver({ onClick }) {
   return (
@@ -39,8 +38,12 @@ function BotonVolver({ onClick }) {
 
 export default function Cabecera({ titulo, etiqueta, subtitulo, onVolver, variante = 'principal', acciones }) {
   return (
-    <header className={`cabecera py-3 ${FONDOS[variante] ?? FONDOS.principal}`}>
-      <div className="max-w-3xl mx-auto px-4 flex items-center justify-between gap-3">
+    <header className="cabecera" data-variante={variante}>
+      <div className="max-w-3xl mx-auto px-4 pt-3 pb-2 flex items-center justify-between gap-3 border-b border-white/10">
+        <span className="text-xs font-semibold tracking-widest uppercase">FIADO$</span>
+        <span className="hidden sm:inline text-xs text-white/70">{SECCIONES[variante]}</span>
+      </div>
+      <div className="max-w-3xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {onVolver ? <BotonVolver onClick={onVolver} /> : <Logo />}
           <div className="min-w-0">
@@ -48,10 +51,10 @@ export default function Cabecera({ titulo, etiqueta, subtitulo, onVolver, varian
             <h1 className="font-display font-extrabold text-xl sm:text-2xl tracking-tight leading-tight break-words">
               {titulo}
             </h1>
-            {subtitulo && <p className="text-xs text-white/80 leading-tight break-words">{subtitulo}</p>}
+            {subtitulo && <p className="text-sm text-white/75 leading-snug break-words mt-1">{subtitulo}</p>}
           </div>
         </div>
-        {acciones && <div className="flex items-center gap-2 shrink-0">{acciones}</div>}
+        {acciones && <div className="flex items-center gap-1.5 shrink-0 ml-auto">{acciones}</div>}
       </div>
     </header>
   );
@@ -67,7 +70,7 @@ export function BotonCatalogo() {
       title="Catálogo de productos"
       className="h-9 w-9 sm:w-auto sm:px-3 rounded-full flex items-center justify-center gap-1.5 bg-black/15 hover:bg-black/25 text-sm transition-colors"
     >
-      <span aria-hidden="true">📦</span>
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5h6a2 2 0 0 1 2 2v13a3 3 0 0 0-3-2H4zM20 5h-6a2 2 0 0 0-2 2v13a3 3 0 0 1 3-2h5z" /></svg>
       <span className="hidden sm:inline">Catálogo</span>
     </button>
   );
@@ -117,6 +120,7 @@ export function MenuNegocio() {
         >
           <p className="px-3 py-2 font-display font-bold break-words border-b-2 border-slate-200 dark:border-slate-600 mb-1">
             {negocio}
+          </p>
           <button
             type="button"
             role="menuitem"
@@ -125,7 +129,6 @@ export function MenuNegocio() {
           >
             ⚙️ Configuración
           </button>
-          </p>
           <button
             type="button"
             role="menuitem"

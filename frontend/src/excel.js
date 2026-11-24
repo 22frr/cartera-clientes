@@ -1,5 +1,5 @@
-import { esAtrasado } from './cobranza';
-import { NOMBRE_APP } from './marca';
+import { esAtrasado } from './cobranza.js';
+import { NOMBRE_APP } from './marca.js';
 
 // Lectura de Excel, plantillas y exportaciones para importar productos y clientes.
 // exceljs pesa bastante, así que se carga recién cuando el usuario toca "Importar" (import dinámico).
@@ -343,7 +343,7 @@ export async function descargarPlantilla(tipo) {
 }
 
 // ---------- Exportaciones ----------
-const FMT_MONTO = '"$" #,##0;[Red]-"$" #,##0';
+const FMT_MONTO = '"$" #,##0.00;-"$" #,##0.00';
 const FMT_FECHA = 'dd/mm/yyyy';
 const COLOR = {
   encabezado: 'FF047857', // verde de la marca
@@ -384,21 +384,31 @@ function fechaTexto(fecha = new Date()) {
 
 // Encabezado de tabla: fondo verde, texto blanco. `derecha` = columnas alineadas a la derecha
 function estiloEncabezado(fila, derecha = []) {
-  fila.height = 22;
+  fila.height = 36;
   fila.eachCell((celda, col) => {
     celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.encabezado } };
-    celda.alignment = { vertical: 'middle', horizontal: derecha.includes(col) ? 'right' : undefined };
+    celda.alignment = { wrapText: true, vertical: 'middle', horizontal: derecha.includes(col) ? 'right' : 'left', indent: 1 };
+    celda.border = { right: { style: 'thin', color: { argb: 'FF6EE7B7' } } };
   });
 }
 
 // Fila de datos: línea fina abajo y sombreado alternado muy suave
 function estiloFila(fila, columnas, indice) {
+  let lineas = 1;
   for (let c = 1; c <= columnas; c++) {
     const celda = fila.getCell(c);
-    celda.border = { bottom: { style: 'thin', color: { argb: COLOR.linea } } };
+    const lado = { style: 'thin', color: { argb: COLOR.linea } };
+    celda.border = { top: lado, bottom: lado, left: lado, right: lado };
+    celda.font = { name: 'Calibri', size: 11 };
+    celda.alignment = { ...celda.alignment, vertical: 'middle', wrapText: true, indent: 1 };
+    if (typeof celda.value === 'string') {
+      const ancho = Math.max(8, (celda.worksheet.getColumn(c).width || 16) - 4);
+      lineas = Math.max(lineas, ...celda.value.split('\n').map((s) => Math.ceil(s.length / ancho)));
+    }
     if (indice % 2 === 1) celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.zebra } };
   }
+  fila.height = Math.max(30, lineas * 17 + 12);
 }
 
 function configurarImpresion(hoja, { horizontal, filaEncabezado }) {
@@ -416,6 +426,11 @@ function configurarImpresion(hoja, { horizontal, filaEncabezado }) {
 
 // Lista de clientes tal como se está viendo (con los filtros y el orden elegidos)
 export async function exportarClientes(lista, { archivados = false } = {}) {
+  const wb = await crearLibroClientes(lista, { archivados });
+  await guardarLibro(wb, `${archivados ? 'clientes_archivados' : 'clientes'}_${hoyLocal()}.xlsx`);
+}
+
+export async function crearLibroClientes(lista, { archivados = false } = {}) {
   if (!lista.length) throw new Error('No hay clientes para exportar');
   const ExcelJS = await cargarExcelJS();
   const wb = new ExcelJS.Workbook();
@@ -440,7 +455,7 @@ export async function exportarClientes(lista, { archivados = false } = {}) {
     const saldo = Number(c.saldo) || 0;
     if (saldo > 0) totalDeuda += saldo;
     const avisos = [c.dias_ultimo_recordatorio, c.dias_ultima_cuenta].filter((d) => d != null);
-    const estado = saldo <= 0 ? 'Al día' : esAtrasado(c) ? 'Atrasado' : 'Debe';
+    const estado = saldo < 0 ? 'A favor' : saldo === 0 ? 'Al día' : esAtrasado(c) ? 'Atrasado' : 'Debe';
 
     const fila = hoja.addRow({
       nombre: c.nombre,
@@ -453,13 +468,15 @@ export async function exportarClientes(lista, { archivados = false } = {}) {
       aviso: avisos.length ? Math.min(...avisos.map(Number)) : null,
     });
     estiloFila(fila, 8, i);
-    fila.getCell(6).font = { bold: true, color: { argb: estado === 'Al día' ? COLOR.verde : COLOR.rojo } };
+    fila.getCell(6).font = { bold: true, color: { argb: saldo <= 0 ? COLOR.verde : COLOR.rojo } };
     if (saldo > 0) fila.getCell(5).font = { bold: true, color: { argb: COLOR.rojo } };
   });
   hoja.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 8 } };
 
   hoja.addRow([]); // la fila vacía separa el total de los filtros
   const total = hoja.addRow({ nombre: 'Total que te deben', saldo: totalDeuda });
+  hoja.mergeCells(total.number, 1, total.number, 4);
+  total.height = 34;
   for (let c = 1; c <= 8; c++) {
     const celda = total.getCell(c);
     celda.font = { bold: true, color: { argb: c === 5 ? COLOR.rojo : COLOR.tinta } };
@@ -468,20 +485,26 @@ export async function exportarClientes(lista, { archivados = false } = {}) {
   }
 
   configurarImpresion(hoja, { horizontal: true, filaEncabezado: 1 });
-  await guardarLibro(wb, `${archivados ? 'clientes_archivados' : 'clientes'}_${hoyLocal()}.xlsx`);
+  return wb;
 }
 
 // Ficha de un cliente: datos, historial con saldo acumulado y detalle de productos
 export async function exportarCliente(cliente, movimientos) {
+  const wb = await crearLibroCliente(cliente, movimientos);
+  const nombre = String(cliente.nombre).replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/g, '') || 'cliente';
+  await guardarLibro(wb, `${nombre}_${hoyLocal()}.xlsx`);
+}
+
+export async function crearLibroCliente(cliente, movimientos) {
   const ExcelJS = await cargarExcelJS();
   const wb = new ExcelJS.Workbook();
 
   const clave = (m) => `${String(m.fecha).slice(0, 10)}|${String(m.creado_en)}`;
-  const orden = [...movimientos].sort((a, b) => clave(a).localeCompare(clave(b)));
+  const orden = movimientos.filter((m) => !m.anulado).sort((a, b) => clave(a).localeCompare(clave(b)));
 
   // ----- Hoja 1: movimientos -----
   const hoja = wb.addWorksheet('Movimientos');
-  [16, 10, 50, 16, 16, 12].forEach((w, i) => { hoja.getColumn(i + 1).width = w; });
+  [23, 14, 58, 20, 20].forEach((w, i) => { hoja.getColumn(i + 1).width = w; });
 
   const saldoActual = Number(cliente.saldo) || 0;
   const info = [
@@ -493,6 +516,7 @@ export async function exportarCliente(cliente, movimientos) {
   ];
   info.forEach(([etiqueta, valor], i) => {
     const r = i + 1;
+    hoja.getRow(r).height = 30;
     const rotulo = hoja.getCell(r, 1);
     rotulo.value = etiqueta;
     rotulo.font = { bold: true, color: { argb: 'FF475569' } };
@@ -510,7 +534,7 @@ export async function exportarCliente(cliente, movimientos) {
 
   const filaEnc = info.length + 2;
   const enc = hoja.getRow(filaEnc);
-  ['Fecha', 'Tipo', 'Detalle', 'Monto', 'Saldo', 'Estado'].forEach((h, i) => { enc.getCell(i + 1).value = h; });
+  ['Fecha', 'Tipo', 'Detalle', 'Monto', 'Saldo'].forEach((h, i) => { enc.getCell(i + 1).value = h; });
   estiloEncabezado(enc, [4, 5]);
   hoja.views = [{ state: 'frozen', ySplit: filaEnc }];
 
@@ -518,7 +542,7 @@ export async function exportarCliente(cliente, movimientos) {
   orden.forEach((m, i) => {
     const esVenta = m.tipo === 'venta';
     const monto = (Number(m.monto) || 0) * (esVenta ? 1 : -1);
-    if (!m.anulado) saldo += monto;
+    saldo = Math.round((saldo + monto) * 100) / 100;
 
     const items = m.items || [];
     const detalle = esVenta
@@ -532,10 +556,9 @@ export async function exportarCliente(cliente, movimientos) {
       esVenta ? 'Compra' : 'Pago',
       detalle,
       monto,
-      m.anulado ? null : saldo,
-      m.anulado ? 'Anulado' : '',
+      saldo,
     ]);
-    estiloFila(fila, 6, i);
+    estiloFila(fila, 5, i);
     fila.getCell(1).numFmt = FMT_FECHA;
     fila.getCell(1).alignment = { horizontal: 'left', vertical: 'top' };
     fila.getCell(2).alignment = { horizontal: 'center', vertical: 'top' };
@@ -543,9 +566,7 @@ export async function exportarCliente(cliente, movimientos) {
     fila.getCell(4).numFmt = FMT_MONTO;
     fila.getCell(5).numFmt = FMT_MONTO;
 
-    if (m.anulado) {
-      fila.font = { color: { argb: COLOR.gris }, strike: true };
-    } else {
+    {
       const color = esVenta ? COLOR.rojo : COLOR.verde;
       fila.getCell(2).font = { bold: true, color: { argb: color } };
       fila.getCell(4).font = { bold: true, color: { argb: color } };
@@ -565,7 +586,6 @@ export async function exportarCliente(cliente, movimientos) {
       { header: 'Cantidad', key: 'cantidad', width: 12, style: { alignment: { horizontal: 'center' } } },
       { header: 'Precio unitario', key: 'precio', width: 16, style: { numFmt: FMT_MONTO } },
       { header: 'Subtotal', key: 'subtotal', width: 16, style: { numFmt: FMT_MONTO } },
-      { header: 'Estado', key: 'estado', width: 12 },
     ];
     estiloEncabezado(h2.getRow(1), [4, 5]);
     h2.views = [{ state: 'frozen', ySplit: 1 }];
@@ -579,15 +599,12 @@ export async function exportarCliente(cliente, movimientos) {
           cantidad: Number(it.cantidad),
           precio: Number(it.precio_unitario),
           subtotal: Number(it.subtotal),
-          estado: m.anulado ? 'Anulado' : '',
         });
-        estiloFila(fila, 6, n++);
-        if (m.anulado) fila.font = { color: { argb: COLOR.gris }, strike: true };
+        estiloFila(fila, 5, n++);
       }
     }
     configurarImpresion(h2, { horizontal: false, filaEncabezado: 1 });
   }
 
-  const nombre = String(cliente.nombre).replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/g, '') || 'cliente';
-  await guardarLibro(wb, `${nombre}_${hoyLocal()}.xlsx`);
+  return wb;
 }

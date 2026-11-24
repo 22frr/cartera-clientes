@@ -1,4 +1,4 @@
-import { dinero, nombreNegocio, configNegocio } from './api';
+import { dinero, nombreNegocio, configNegocio } from './api.js';
 
 
 export const DIAS_ATRASADO = 30;
@@ -154,23 +154,26 @@ export function armarLinkWhatsApp(cliente, texto) {
   const num = telefonoParaWhatsApp(cliente.telefono);
   if (!num) return null;
   const msg = encodeURIComponent(texto ?? mensajeRecordatorio(cliente));
-  if (esCelular()) return `https://wa.me/${num}?text=${msg}`;
-  return getModoWhatsApp() === 'app'
+  return esCelular() || getModoWhatsApp() === 'app'
     ? `whatsapp://send?phone=${num}&text=${msg}`
     : `https://web.whatsapp.com/send?phone=${num}&text=${msg}`;
 }
 
 export function abrirWhatsApp(url) {
+  if (!url) return false;
   if (url.startsWith('whatsapp:')) {
     window.location.href = url;
-    return;
+    return true;
   }
-  const w = window.open('', 'whatsapp');
+  // Abrir la URL directamente evita dejar una pestaña vacía al salir a la app.
+  // El nombre permite reutilizar la pestaña creada por FIADO$, si el navegador
+  // y la política de WhatsApp conservan la relación entre las ventanas.
+  const w = window.open(url, 'fiados-whatsapp');
   if (!w) {
     window.alert('El navegador bloqueó la ventana de WhatsApp. Permitila para este sitio.');
-    return;
+    return false;
   }
   try { w.opener = null; } catch { /* ya era una pestaña de WhatsApp: no hace falta */ }
-  w.location.href = url;
   try { w.focus(); } catch { /* algunos navegadores no dejan enfocar */ }
+  return true;
 }

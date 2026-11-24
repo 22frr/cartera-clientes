@@ -74,6 +74,7 @@ export function CatalogoProvider({ children }) {
     }
   }, []);
 
+  // oxlint-disable-next-line react/set-state-in-effect -- Carga inicial desde la API; las actualizaciones ocurren después de la respuesta.
   useEffect(() => { recargar(); }, [recargar]);
 
   // Ejecuta una acción sobre el catálogo, recarga, avisa en pantalla y avisa a las otras ventanas

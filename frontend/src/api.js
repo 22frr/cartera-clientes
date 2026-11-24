@@ -1,4 +1,4 @@
-import { avisarCambio } from './sync';
+import { avisarCambio } from './sync.js';
 
 function getToken() {
   return localStorage.getItem('token');

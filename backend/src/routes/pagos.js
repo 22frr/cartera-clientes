@@ -3,15 +3,18 @@ import pool from '../db.js';
 import { requiereAuth } from '../auth.js';
 import { fechaRazonable, MENSAJE_FECHA } from '../fechas.js';
 
+const MEDIOS = ['efectivo', 'transferencia', 'mercadopago', 'tarjeta'];
+
 const router = Router();
 router.use(requiereAuth);
 
 router.post('/', async (req, res) => {
-  const { cliente_id, monto, fecha, observacion } = req.body;
+  const { cliente_id, monto, fecha, observacion, medio_pago } = req.body;
   if (!cliente_id || !monto || Number(monto) <= 0) {
     return res.status(400).json({ error: 'Cliente y monto (mayor a 0) son obligatorios' });
   }
   if (fecha && !fechaRazonable(fecha)) return res.status(400).json({ error: MENSAJE_FECHA });
+  if (medio_pago && !MEDIOS.includes(medio_pago)) return res.status(400).json({ error: 'Medio de pago no válido' });
   try {
     const dueño = await pool.query(
       'SELECT id FROM clientes WHERE id=$1 AND negocio_id=$2',
@@ -20,9 +23,9 @@ router.post('/', async (req, res) => {
     if (dueño.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
 
     const { rows } = await pool.query(
-      `INSERT INTO pagos (negocio_id, cliente_id, monto, fecha, observacion)
-       VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5) RETURNING *`,
-      [req.negocio_id, cliente_id, monto, fecha || null, observacion || null]
+      `INSERT INTO pagos (negocio_id, cliente_id, monto, fecha, observacion, medio_pago)
+       VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6) RETURNING *`,
+      [req.negocio_id, cliente_id, monto, fecha || null, observacion || null, medio_pago || null]
     );
     res.status(201).json(rows[0]);
   } catch (error) {

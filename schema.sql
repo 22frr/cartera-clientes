@@ -97,6 +97,7 @@ CREATE TABLE pagos (
   monto NUMERIC(12,2) NOT NULL,
   fecha DATE NOT NULL DEFAULT CURRENT_DATE,
   observacion TEXT,
+  medio_pago VARCHAR(20),             -- efectivo | transferencia | mercadopago | tarjeta (opcional)
   anulado BOOLEAN DEFAULT FALSE,
   creado_en TIMESTAMP DEFAULT NOW()
 );

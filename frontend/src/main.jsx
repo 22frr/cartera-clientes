@@ -17,6 +17,7 @@ import { ConfirmProvider } from './ConfirmContext.jsx';
 // El Provider vive acá arriba, así que no se destruye al navegar entre pantallas.
 // Antes de mostrar nada se carga la configuración del negocio (código de área, datos de pago):
 // los links de WhatsApp se arman al dibujar la pantalla y la necesitan ya cargada.
+// oxlint-disable-next-line react/only-export-components -- Punto de entrada: monta el router y no exporta componentes.
 function Privada() {
   const logueado = estaLogueado();
   const [listo, setListo] = useState(false);

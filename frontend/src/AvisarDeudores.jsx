@@ -27,7 +27,8 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
   function alternar(id) {
     setElegidos((prev) => {
       const nuevo = new Set(prev);
-      nuevo.has(id) ? nuevo.delete(id) : nuevo.add(id);
+      if (nuevo.has(id)) nuevo.delete(id);
+      else nuevo.add(id);
       return nuevo;
     });
   }
@@ -110,6 +111,10 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
               Se prepara un mensaje de WhatsApp por cliente. Vos lo enviás desde WhatsApp y acá queda
               registrado a quién ya le avisaste.
             </p>
+
+            <aside className="rounded-lg border-l-4 border-marca-500 bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Para enviar avisos por WhatsApp, usá el celular.
+            </aside>
 
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-slate-600 dark:text-slate-300">
@@ -221,11 +226,24 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
                 <div className="bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm">{error}</div>
               )}
 
+              <div className="text-sm text-slate-600 dark:text-slate-300 space-y-2">
+                <button type="button" className="underline underline-offset-4" onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(textoActual);
+                    setAbierto(true);
+                    setError('');
+                  } catch {
+                    setError('No se pudo copiar. Seleccioná y copiá el mensaje de arriba.');
+                  }
+                }}>Copiar mensaje</button>
+                <p>Podés pegarlo en el WhatsApp que ya tenés abierto. Confirmá el aviso después de enviarlo.</p>
+              </div>
+
               {!abierto ? (
                 <div className="space-y-2">
                   <a
                     href={armarLinkWhatsApp(actual, textoActual)}
-                    onClick={(e) => { e.preventDefault(); abrirWhatsApp(armarLinkWhatsApp(actual)); setAbierto(true); }}
+                    onClick={(e) => { e.preventDefault(); if (abrirWhatsApp(armarLinkWhatsApp(actual, textoActual))) setAbierto(true); }}
                     className="block w-full text-center bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-medium transition-colors"
                   >
                     💬 Abrir WhatsApp
@@ -257,8 +275,8 @@ export default function AvisarDeudores({ clientes, onCerrar }) {
                     </button>
                   </div>
                   <a
-                    href={armarLinkWhatsApp(actual)}
-                    onClick={(e) => { e.preventDefault(); abrirWhatsApp(armarLinkWhatsApp(actual)); }}
+                    href={armarLinkWhatsApp(actual, textoActual)}
+                    onClick={(e) => { e.preventDefault(); abrirWhatsApp(armarLinkWhatsApp(actual, textoActual)); }}
                     className="block text-center text-xs underline text-slate-600 dark:text-slate-300"
                   >
                     Abrir WhatsApp de nuevo

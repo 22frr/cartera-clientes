@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   getCliente, getMovimientos, crearVenta, crearPago, editarVenta,
@@ -15,7 +15,26 @@ import Cabecera, { AccionesCabecera } from './Cabecera';
 import { exportarCliente } from './excel';
 import { hace, diasUltimoAviso, armarLinkWhatsApp, abrirWhatsApp } from './cobranza';
 import { alCambiarDatos } from './sync';
+import { LOGO_MERCADO_PAGO } from './logoMercadoPago';
 const filaVacia = { producto: '', cantidad: '1', precio_unitario: '', total: '' };
+
+// Panel y solapa comparten fondo y borde para verse como una sola pieza.
+// Fondo: apenas teñido (claro) o gris azulado con un toque de color (oscuro).
+const ESTILO_PANEL = {
+  compra: 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-[#3a2930] rounded-tl-none !mt-0',
+  pago: 'border-marca-500 dark:border-marca-700 bg-marca-50 dark:bg-[#1d3a3c] rounded-tr-none !mt-0',
+};
+
+const ESTILO_SOLAPA = {
+  compra: 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-[#3a2930] text-red-700 dark:text-red-300',
+  pago: 'border-marca-500 dark:border-marca-700 bg-marca-50 dark:bg-[#1d3a3c] text-marca-700 dark:text-marca-300',
+};
+const SOLAPA_INACTIVA =
+  'py-2 rounded-t-xl border-2 border-b-0 border-slate-400 dark:border-slate-600 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600';
+const BOTON_SOLIDO = {
+  compra: 'bg-red-500 hover:bg-red-600',
+  pago: 'bg-marca-600 hover:bg-marca-700',
+};
 
 // Fecha de hoy como AAAA-MM-DD en hora LOCAL (toISOString usaría UTC y de noche daría "mañana")
 function hoy() {
@@ -429,6 +448,65 @@ function InsigniaTipo({ tipo, anulado }) {
   );
 }
 
+// Medios de pago (opcional). El id es lo que se guarda en la base.
+const MEDIOS_PAGO = [
+  { id: 'efectivo', emoji: '💵', nombre: 'Efectivo' },
+  { id: 'transferencia', emoji: '🏦', nombre: 'Transferencia' },
+  { id: 'mercadopago', emoji: null, nombre: 'Mercado Pago' },
+  { id: 'tarjeta', emoji: '💳', nombre: 'Tarjeta' },
+];
+
+// Ícono del medio. Mercado Pago usa el logo (imagen); los demás, emoji.
+function IconoMedio({ id, className = 'w-6 h-6', emoji = '1.5rem' }) {
+  if (id === 'mercadopago') {
+    return <img src={LOGO_MERCADO_PAGO} alt="" aria-hidden="true" className={`${className} object-contain`} />;
+  }
+  const m = MEDIOS_PAGO.find((x) => x.id === id);
+  return <span aria-hidden="true" className="leading-none text-center" style={{ fontSize: emoji }}>{m?.emoji}</span>;
+}
+
+// Botones para elegir el medio; tocar el elegido otra vez lo des-selecciona
+function SelectorMedioPago({ valor, onCambiar }) {
+  return (
+    <div>
+      <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">Medio de pago (opcional)</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {MEDIOS_PAGO.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => onCambiar(valor === m.id ? '' : m.id)}
+            aria-pressed={valor === m.id}
+            className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border-2 text-xs font-semibold transition-colors ${
+              valor === m.id
+                ? 'bg-slate-800 dark:bg-marca-600 border-slate-800 dark:border-marca-600 text-white'
+                : 'border-slate-500 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-marca-500'
+            }`}
+          >
+            <IconoMedio id={m.id} className="w-6 h-4" emoji="1.125rem" />
+            {m.nombre}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Chip chico y discreto, al lado del monto. En el celular solo ícono; desde sm también el nombre.
+function ChipMedioPago({ medio }) {
+  const m = MEDIOS_PAGO.find((x) => x.id === medio);
+  if (!m) return null;
+  return (
+    <span
+      title={m.nombre}
+      className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap bg-black/10 dark:bg-white/10 text-slate-700 dark:text-slate-200"
+    >
+      <IconoMedio id={m.id} className="w-5 h-3.5" emoji="0.8rem" />
+      <span className="hidden sm:inline">{m.nombre}</span>
+    </span>
+  );
+}
+
 export default function Cliente() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -437,7 +515,7 @@ export default function Cliente() {
   const [cliente, setCliente] = useState(null);
   const [movs, setMovs] = useState([]);
   const [modo, setModo] = useState(null);
-  
+
 
   const [filas, setFilas] = useState([{ ...filaVacia }]);
   const refsProducto = useRef([]);
@@ -457,6 +535,7 @@ export default function Cliente() {
 
   const [montoPago, setMontoPago] = useState('');
   const [descPago, setDescPago] = useState('');
+  const [medioPago, setMedioPago] = useState('');
   const [fechaCompra, setFechaCompra] = useState(hoy);
   const [fechaPago, setFechaPago] = useState(hoy);
   const [expandidos, setExpandidos] = useState(new Set());
@@ -477,7 +556,7 @@ export default function Cliente() {
   const { productosActivos: catalogo, registrarDestino } = useCatalogo();
 
 
-  async function cargar() {
+  const cargar = useCallback(async () => {
     try {
       const [c, m] = await Promise.all([getCliente(id), getMovimientos(id)]);
       setCliente(c);
@@ -486,10 +565,11 @@ export default function Cliente() {
     } catch (e) {
       setError(e.message);
     }
-  }
+  }, [id]);
 
-  useEffect(() => { cargar(); }, [id]);
-  useEffect(() => alCambiarDatos(cargar), [id]);
+  // oxlint-disable-next-line react/set-state-in-effect -- Sincroniza la ficha con la API al cambiar de cliente.
+  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => alCambiarDatos(cargar), [cargar]);
 // Mientras haya una compra abierta (nueva o en edición), el catálogo puede sumarle productos
   useEffect(() => {
     if (editando !== null && editModo === 'productos') registrarDestino((p) => setFilasEdit((prev) => sumarProducto(prev, p)));
@@ -577,7 +657,7 @@ export default function Cliente() {
     }
   }
 
-  
+
   function abrir(t) {
     setErrorForm('');
     setModo(modo === t ? null : t);
@@ -586,6 +666,7 @@ export default function Cliente() {
     setDescRapida('');
     setMontoPago('');
     setDescPago('');
+    setMedioPago('');
     setFechaCompra(hoy());
     setFechaPago(hoy());
     cancelarEdicion();
@@ -610,6 +691,7 @@ export default function Cliente() {
     setModo(null);
     setMontoPago('');
     setDescPago('');
+    setMedioPago('');
     setFechaPago(hoy());
   }
 
@@ -621,8 +703,8 @@ export default function Cliente() {
     setFilas((prev) => (prev.length === 1 ? [{ ...filaVacia }] : prev.filter((_, idx) => idx !== i)));
   }
 
-  
-  
+
+
   const totalCompra = filas.reduce((acc, f) => acc + (Number(f.total) || 0), 0);
 
     // Deshacer una compra recién cargada: se anula y se borra, así no queda en "anulados"
@@ -785,11 +867,13 @@ export default function Cliente() {
         monto: Number(montoPago),
         fecha: fechaPago || undefined,
         observacion: descPago.trim() || undefined,
+        medio_pago: medioPago || undefined,
       });
       toast.ok(`Pago de ${dinero(montoPago)} registrado`);
       setModo(null);
       setMontoPago('');
       setDescPago('');
+      setMedioPago('');
       setFechaPago(hoy());
       cargar();
     } catch (e) {
@@ -844,7 +928,8 @@ function toggleSeleccionMov(m) {
   const k = claveMov(m);
   setMovsSeleccionados((prev) => {
     const nuevo = new Set(prev);
-    nuevo.has(k) ? nuevo.delete(k) : nuevo.add(k);
+    if (nuevo.has(k)) nuevo.delete(k);
+    else nuevo.add(k);
     return nuevo;
   });
 }
@@ -913,7 +998,8 @@ async function eliminarMovsSeleccionados() {
   function toggleExpandido(idVenta) {
     setExpandidos((prev) => {
       const nuevo = new Set(prev);
-      nuevo.has(idVenta) ? nuevo.delete(idVenta) : nuevo.add(idVenta);
+      if (nuevo.has(idVenta)) nuevo.delete(idVenta);
+      else nuevo.add(idVenta);
       return nuevo;
     });
   }
@@ -1100,23 +1186,26 @@ async function eliminarMovsSeleccionados() {
 
             {/* Botones compra / pago */}
             <h2 className="titulo-seccion text-xl self-start -mb-2">Registrar movimiento</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => abrir('compra')}
-                className={`py-3 rounded-xl font-semibold text-white transition-colors ${modo === 'compra' ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'}`}
-              >
-                + Compra
-              </button>
-              <button
-                onClick={() => abrir('pago')}
-                className={`py-3 rounded-xl font-semibold text-white transition-colors ${modo === 'pago' ? 'bg-marca-700' : 'bg-marca-600 hover:bg-marca-700'}`}
-              >
-                + Pago
-              </button>
+              <div className={modo ? 'flex items-end gap-1' : 'grid grid-cols-2 gap-3'}>
+              {[['compra', '+ Compra'], ['pago', '+ Pago']].map(([tipo, etiqueta]) => (
+                <button
+                  key={tipo}
+                  onClick={() => abrir(tipo)}
+                  className={`font-semibold transition-colors ${
+                    !modo
+                      ? `py-3 rounded-xl text-white ${BOTON_SOLIDO[tipo]}`
+                      : modo === tipo
+                        ? `flex-1 py-3 rounded-t-xl border-2 border-b-0 relative z-10 -mb-[2px] ${ESTILO_SOLAPA[tipo]}`
+                        : `flex-1 ${SOLAPA_INACTIVA}`
+                  }`}
+                >
+                  {etiqueta}
+                </button>
+              ))}
             </div>
 
            {modo === 'compra' && (
-            <div className="tarjeta p-4 space-y-3 min-h-[220px]">
+            <div className={`tarjeta p-4 space-y-3 min-h-[220px] ${ESTILO_PANEL.compra}`}>
               <SelectorModoCompra valor={compraModo} onCambiar={cambiarModoCompra} />
               {errorForm && <AvisoForm texto={errorForm} />}
               {compraModo === 'rapida' ? (
@@ -1208,7 +1297,7 @@ async function eliminarMovsSeleccionados() {
             )}
 
             {modo === 'pago' && (
-              <form onSubmit={confirmarPago} onKeyDown={flechasEnFormulario} className="tarjeta p-4 space-y-3 min-h-[220px] flex flex-col justify-center">
+              <form onSubmit={confirmarPago} onKeyDown={flechasEnFormulario} className={`tarjeta p-4 space-y-3 min-h-[220px] flex flex-col justify-center ${ESTILO_PANEL.pago}`}>
                 {errorForm && <AvisoForm texto={errorForm} />}
                 <label className="block text-sm text-slate-600 dark:text-slate-300">
                   Monto pagado *
@@ -1225,9 +1314,10 @@ async function eliminarMovsSeleccionados() {
                     className="mt-1 w-full border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-marca-500"
                     value={descPago}
                     onChange={(e) => setDescPago(e.target.value)}
-                    placeholder="Ej: Efectivo, transferencia..."
+                    placeholder="Ej: pago parcial, cuota..."
                   />
                 </label>
+                <SelectorMedioPago valor={medioPago} onCambiar={setMedioPago} />
                 {Number(cliente.saldo) > 0 && (
                   <button
                     type="button"
@@ -1496,9 +1586,12 @@ async function eliminarMovsSeleccionados() {
                       </div>
 
                       <div className="text-right shrink-0">
-                        <p className={`numero font-bold ${m.anulado ? 'line-through opacity-70' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
+                        <div className="flex items-center justify-end gap-2">
+                          {m.tipo === 'pago' && <ChipMedioPago medio={m.medio_pago} />}
+                          <p className={`numero font-bold ${m.anulado ? 'line-through opacity-70' : ''} ${m.tipo === 'venta' ? 'text-red-500' : 'text-marca-500'}`}>
                           {m.tipo === 'venta' ? '+' : '−'}{dinero(m.monto)}
                         </p>
+                        </div>
 
                         {!seleccionandoMovs && (
                           m.anulado ? (
@@ -1566,7 +1659,7 @@ async function eliminarMovsSeleccionados() {
                 )
               )}
             </ul>
-          </> 
+          </>
         )}
       </main>
     </div>

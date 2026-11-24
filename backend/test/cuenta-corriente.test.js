@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import bcrypt from 'bcryptjs';
 import pool from '../src/db.js';
 
-const api = process.env.TEST_API_URL ?? 'http://127.0.0.1:3000/api';
+let api = process.env.TEST_API_URL;
 
 async function request(path, status, { token, method = 'GET', body } = {}) {
   const headers = {};
@@ -14,7 +14,7 @@ async function request(path, status, { token, method = 'GET', body } = {}) {
   const response = await fetch(`${api}${path}`, {
     method,
     headers,
-    body: JSON.stringify(body),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(5000),
   });
   const data = await response.json();
@@ -23,14 +23,24 @@ async function request(path, status, { token, method = 'GET', body } = {}) {
 }
 
 test('cuenta corriente: compra, pago, anulación, restauración y aislamiento', async (t) => {
+  // Sin API externa configurada, iniciar la misma aplicación en un puerto temporal.
+  let servidor;
   const negocios = [];
   t.after(async () => {
     try {
       await pool.query('DELETE FROM negocios WHERE id = ANY($1::int[])', [negocios]);
     } finally {
+      if (servidor) await new Promise((resolve) => servidor.close(resolve));
       await pool.end();
     }
   });
+
+  if (!api) {
+    const { default: app } = await import('../src/app.js');
+    servidor = app.listen(0, '127.0.0.1');
+    await new Promise((resolve) => servidor.once('listening', resolve));
+    api = `http://127.0.0.1:${servidor.address().port}/api`;
+  }
 
   const password = randomUUID();
   const hash = await bcrypt.hash(password, 10);
