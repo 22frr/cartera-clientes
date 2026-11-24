@@ -79,6 +79,21 @@ node src/crear-negocio.js "Nombre del negocio" usuario contraseña telefono rubr
 Los comercios pueden importar sus propios productos y clientes (con saldo inicial) desde la
 aplicación, con una plantilla de Excel descargable, y exportar listas y fichas a Excel.
 
+## Prueba del flujo de cuenta corriente
+
+Con el backend en ejecución y conectado a una base local de desarrollo inicializada con `schema.sql`:
+
+```bash
+cd backend
+npm test
+```
+
+Usá la misma configuración de base de datos para el backend y la prueba. Si el backend
+usa un puerto distinto de 3000, configurá `TEST_API_URL` con la URL base de la API
+(incluyendo `/api`). La prueba crea dos negocios temporales y luego los elimina.
+Verifica el saldo después de una compra con decimales, un pago parcial, anulaciones
+y restauraciones, además del acceso a los datos desde el otro negocio.
+
 ## Estado del proyecto
 
 En desarrollo activo. Ver la sección 6 de `DOCUMENTACION_TECNICA.md` para el
