@@ -4,6 +4,29 @@ FIADO$ es una aplicación web para gestionar el fiado de pequeños comercios.
 Permite registrar lo que compra y paga cada cliente, consultar su saldo y hacer
 seguimiento de las cuentas pendientes desde el celular o la computadora.
 
+## Capturas
+
+Lista de clientes con saldos, filtros y resumen del negocio.
+
+![Lista de clientes de FIADO$ con saldos y estado de las cuentas](docs/screenshots/clientes.png)
+
+<details>
+<summary>Ver ficha del cliente y avisos por WhatsApp</summary>
+
+### Ficha del cliente
+
+Saldo pendiente, registro de compras y pagos e historial de movimientos.
+
+![Ficha de un cliente de FIADO$ con compras, pagos e historial](docs/screenshots/ficha-cliente.png)
+
+### Avisos por WhatsApp
+
+Selección de clientes con deuda para preparar los recordatorios.
+
+![Selección de clientes para los avisos por WhatsApp en FIADO$](docs/screenshots/avisos-whatsapp.png)
+
+</details>
+
 ## El problema
 
 En un comercio, llevar el fiado en una libreta exige revisar compras y pagos para
