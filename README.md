@@ -1,19 +1,35 @@
 # FIADO$ — cuenta corriente para comercios
 
-Aplicación web para administrar clientes de cuenta corriente ("fiado"): registro de
-compras, pagos, saldo automático, seguimiento de cobranza (días sin pagar y recordatorios
-por WhatsApp), catálogo de productos propio por negocio, e importación y exportación con Excel.
+FIADO$ es una aplicación web para gestionar el fiado de pequeños comercios.
+Permite registrar lo que compra y paga cada cliente, consultar su saldo y hacer
+seguimiento de las cuentas pendientes desde el celular o la computadora.
 
-Pensada para cualquier comercio que venda a crédito a clientes habituales
-(kioscos, despensas, ferreterías, bazares, etc.), con soporte para múltiples
-negocios sobre la misma instalación (multi-tenant).
+## El problema
 
-Ver [`DOCUMENTACION_TECNICA.md`](./DOCUMENTACION_TECNICA.md) para alcance,
-requerimientos, arquitectura y decisiones de diseño.
+En un comercio, llevar el fiado en una libreta exige revisar compras y pagos para
+saber cuánto debe cada cliente. FIADO$ reúne esos movimientos en una ficha y
+calcula el saldo a partir del historial vigente.
+
+## Funciones principales
+
+- **Clientes:** alta, búsqueda, edición y archivo de fichas.
+- **Compras y pagos:** compra rápida por monto o con productos, pagos parciales y registro del medio de pago.
+- **Historial:** consulta de movimientos, anulación y restauración con actualización del saldo.
+- **Cobranza:** días sin pagar, mensajes editables para WhatsApp y registro de avisos confirmados.
+- **Excel:** importación de clientes y productos; exportación de listas y fichas excluyendo movimientos anulados.
+- **Uso diario:** interfaz adaptable a celular, tema claro y oscuro y sincronización entre pestañas.
 
 ## Stack
 
-PERN: PostgreSQL · Express · React (Vite + Tailwind) · Node.js. Excel con `exceljs`.
+React · Vite · Tailwind CSS · Node.js · Express · PostgreSQL · ExcelJS.
+
+El frontend consume una API REST. El backend utiliza JWT para autenticar las
+sesiones y vincula los datos a cada negocio. PostgreSQL calcula los saldos a
+partir de compras y pagos activos. Las pruebas de integración verifican también
+que un negocio no pueda acceder a los datos de otro.
+
+Las decisiones de diseño y el modelo de datos están en
+[`DOCUMENTACION_TECNICA.md`](./DOCUMENTACION_TECNICA.md).
 
 ## Requisitos previos
 
@@ -92,7 +108,7 @@ cd backend
 node src/crear-negocio.js "Nombre del negocio" usuario contraseña telefono rubro direccion
 ```
 
-## Verificación antes de publicar
+## Pruebas y verificación
 
 Desde la raíz, con PostgreSQL disponible y `backend/.env` configurado:
 
@@ -159,8 +175,9 @@ y restauraciones, además del acceso a los datos desde el otro negocio.
 
 ## Estado del proyecto
 
-En desarrollo activo. Ver la sección 6 de `DOCUMENTACION_TECNICA.md` para el
-detalle de funcionalidades pendientes, y `estado_proyecto.md` para el punto en que se está trabajando.
+Primera versión funcional. Incluye gestión de clientes, compras, pagos,
+seguimiento de cobranza e intercambio de datos con Excel. Este repositorio
+contiene el código y las instrucciones para ejecutarlo localmente.
 
 ## Licencia
 
