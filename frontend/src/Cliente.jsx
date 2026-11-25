@@ -21,13 +21,13 @@ const filaVacia = { producto: '', cantidad: '1', precio_unitario: '', total: '' 
 // Panel y solapa comparten fondo y borde para verse como una sola pieza.
 // Fondo: apenas teñido (claro) o gris azulado con un toque de color (oscuro).
 const ESTILO_PANEL = {
-  compra: 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-[#3a2930] rounded-tl-none !mt-0',
-  pago: 'border-marca-500 dark:border-marca-700 bg-marca-50 dark:bg-[#1d3a3c] rounded-tr-none !mt-0',
+  compra: 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-[#3a2930] !mt-0',
+  pago: 'border-marca-500 dark:border-marca-700 bg-marca-50 dark:bg-[#1d3a3c] !mt-0',
 };
 
 const ESTILO_SOLAPA = {
   compra: 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-[#3a2930] text-red-700 dark:text-red-300',
-  pago: 'border-marca-500 dark:border-marca-700 bg-marca-50 dark:bg-[#1d3a3c] text-marca-700 dark:text-marca-300',
+  pago: 'border-marca-500 dark:border-marca-700 bg-marca-50 dark:bg-[#1d3a3c] text-marca-700 dark:text-marca-400',
 };
 const SOLAPA_INACTIVA =
   'py-2 rounded-t-xl border-2 border-b-0 border-slate-400 dark:border-slate-600 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600';
@@ -1205,7 +1205,7 @@ async function eliminarMovsSeleccionados() {
             </div>
 
            {modo === 'compra' && (
-            <div className={`tarjeta p-4 space-y-3 min-h-[220px] ${ESTILO_PANEL.compra}`}>
+            <div className={`border-2 rounded-b-xl p-4 space-y-3 min-h-[220px] ${ESTILO_PANEL.compra}`}>
               <SelectorModoCompra valor={compraModo} onCambiar={cambiarModoCompra} />
               {errorForm && <AvisoForm texto={errorForm} />}
               {compraModo === 'rapida' ? (
@@ -1297,7 +1297,7 @@ async function eliminarMovsSeleccionados() {
             )}
 
             {modo === 'pago' && (
-              <form onSubmit={confirmarPago} onKeyDown={flechasEnFormulario} className={`tarjeta p-4 space-y-3 min-h-[220px] flex flex-col justify-center ${ESTILO_PANEL.pago}`}>
+              <form onSubmit={confirmarPago} onKeyDown={flechasEnFormulario} className={`border-2 rounded-b-xl p-4 space-y-3 min-h-[220px] flex flex-col justify-center ${ESTILO_PANEL.pago}`}>
                 {errorForm && <AvisoForm texto={errorForm} />}
                 <label className="block text-sm text-slate-600 dark:text-slate-300">
                   Monto pagado *
