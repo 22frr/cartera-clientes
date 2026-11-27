@@ -4,6 +4,11 @@ FIADO$ es una aplicación web para gestionar el fiado de pequeños comercios.
 Permite registrar lo que compra y paga cada cliente, consultar su saldo y hacer
 seguimiento de las cuentas pendientes desde el celular o la computadora.
 
+**[Probar la demo pública](https://fiados-demo.onrender.com)** · En el login,
+elegí **Completar acceso de prueba** y luego **Ingresar**. Usa datos ficticios
+compartidos entre visitantes. La primera visita después de un período sin uso
+puede tardar alrededor de un minuto por el alojamiento gratuito.
+
 ## Capturas
 
 Lista de clientes con saldos, filtros y resumen del negocio.

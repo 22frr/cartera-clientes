@@ -1,8 +1,13 @@
 # Publicar FIADO$ gratis para el CV
 
 La configuración usa un servicio web Free de Render para React y Express, y una
-base Free de Neon para PostgreSQL. No requiere comprar un dominio. La URL real
-la asigna Render al crear el servicio; todavía no hay un despliegue publicado.
+base Free de Neon para PostgreSQL. No requiere comprar un dominio.
+
+Demo publicada: <https://fiados-demo.onrender.com>.
+El 27/11/2026 se verificaron el login, los cuatro clientes iniciales y la creación
+de un cliente ficticio adicional con una compra de $5.000 y un pago de $2.000.
+Después de recargar su ficha, se conservaron ambos movimientos y el saldo de $3.000.
+Los datos son compartidos: los totales actuales pueden cambiar con las pruebas.
 
 ## 1. Crear las cuentas
 
@@ -62,9 +67,9 @@ Reemplazar los marcadores por el enlace real y el repositorio accesible:
 > React, Node.js, Express y PostgreSQL. API REST con autenticación JWT,
 > aislamiento de datos por negocio, registro de compras y pagos,
 > importación/exportación de Excel e interfaz responsive.
-> Demo: [URL de Render] · Código: https://github.com/22frr/cartera-clientes
+> Demo: https://fiados-demo.onrender.com · Código: https://github.com/22frr/cartera-clientes
 
-Agregar el enlace real a la parte superior del README cuando esté publicado.
+El README incluye el enlace a la demo pública.
 Si el repositorio es privado, los reclutadores no podrán consultar su código
 sin acceso; el enlace de la demo puede compartirse de todos modos.
 
