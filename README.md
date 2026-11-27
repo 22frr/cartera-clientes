@@ -56,6 +56,10 @@ Las decisiones de diseño y el modelo de datos están en
 
 ## Requisitos previos
 
+Para publicar una demo gratuita con datos ficticios y un enlace para el CV, ver
+[`docs/PUBLICAR.md`](./docs/PUBLICAR.md). El repositorio incluye la configuración
+de Render y conexión a PostgreSQL mediante `DATABASE_URL` para Neon.
+
 - Node.js 22.12+ (probado con Node 24) y npm
 - PostgreSQL instalado localmente (o acceso a una instancia)
 

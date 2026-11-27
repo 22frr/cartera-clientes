@@ -4,7 +4,7 @@ const tareas = {
   setup: [['ci', '--prefix', 'backend'], ['ci', '--prefix', 'frontend']],
   test: [['test', '--prefix', 'frontend'], ['test', '--prefix', 'backend']],
   lint: [['run', 'lint', '--prefix', 'frontend'], ['run', 'lint:backend', '--prefix', 'frontend']],
-  verify: [['test'], ['run', 'lint'], ['run', 'build']],
+  verify: [['run', 'lint'], ['run', 'build'], ['test']],
 };
 const pasos = tareas[process.argv[2]];
 if (!pasos) throw new Error('Tarea desconocida');

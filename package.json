@@ -5,6 +5,7 @@
   "type": "module",
   "engines": { "node": ">=22.12.0" },
   "scripts": {
+    "start": "npm start --prefix backend",
     "setup": "node scripts/tareas.mjs setup",
     "test": "node scripts/tareas.mjs test",
     "build": "npm run build --prefix frontend",

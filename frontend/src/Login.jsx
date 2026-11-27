@@ -62,6 +62,16 @@ export default function Login() {
           </div>
         )}
 
+        {import.meta.env.VITE_DEMO_MODE === 'true' && (
+          <div className="rounded-lg bg-marca-50 dark:bg-slate-800 p-3 text-sm space-y-2 text-slate-700 dark:text-slate-200">
+            <p>Demo pública con datos ficticios. Podés registrar compras y pagos. Los cambios son compartidos; usá solo datos de ejemplo.</p>
+            <button type="button" className="font-semibold underline" disabled={cargando} onClick={() => {
+              setUsuario('demo');
+              setPassword('FiadosDemo2026');
+            }}>Completar acceso de prueba</button>
+          </div>
+        )}
+
         <label className="block text-sm text-slate-600 dark:text-slate-300">
           Usuario
           <input
